@@ -1,0 +1,8 @@
+.DS_Store
+.RData
+.Rhistory
+.Rproj.user/
+capstone-project.Rproj
+dataset_yelp_challenge
+yelp_dataset_challenge_academic_dataset*
+yelp_db.sql
