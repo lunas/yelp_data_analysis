@@ -6,9 +6,76 @@ output: html_document
 ---
 
 ```{r}
-# Preparatory work: load the businesses table.
+# Preparatory work
+
+# Some links:
+# - All categories: https://www.yelp.com/developers/documentation/v2/all_category_list
+
+# load libraries
+library(ggplot2)
+source('utils.R')
 source('db.R')
-buss.rs = query('select id, business_id, name, full_address, city, state, longitude, latitude, stars, review_counts, attribs::json, open from businesses')
+
+# Load businesses table
+business_sql = "select id, business_id, name, full_address, city, state, 
+                CASE WHEN state = ANY('{\"BW\",\"RP\"}'::text[]) THEN 'DE'
+                     WHEN state = ANY('{\"EDH\",\"ELN\",\"FIF\",\"HAM\",\"KHL\",\"MLN\",\"SCB\",\"XGL\"}'::text[]) THEN 'GB'
+                     WHEN state = ANY('{\"ON\",\"QC\"}'::text[]) THEN 'CA'
+                     ELSE 'US' END as country,
+                longitude, latitude, stars, review_count, 
+                attribs->'By Appointment Only'::text as appointment,
+                attribs->'Alcohol'::text as alcohol,
+                attribs->'Noise Level'::text as noise,
+                attribs->'Has TV'::text as tv,
+                attribs->'Attire'::text as attire,
+                attribs->'Good for Kids'::text as for_kids,
+                attribs->'Good for Groups'::text as for_groups,
+                attribs->'Outdoor Seating'::text as outdoor,
+                attribs->'Price Range'::text as price_range,
+                attribs->'Take-out'::text takeout,
+                attribs->'Drive-Thru'::text drivethrou,
+                attribs->'Happy Hour'::text as happyhour,
+                attribs->'Takes Reservations'::text as reservations,
+                attribs->'Waiter Service'::text as waiter_service,
+                attribs->'Caters'::text as caters,
+                attribs->'Smoking'::text as smoking,
+                attribs->'Wheelchair Accessible'::text as wheelchair,
+                attribs->'Coat Check'::text as coat_check,
+                attribs->'Dogs Allowed'::text as dogs,
+                attribs->'Hot and New'::text as hotnew,
+                attribs->'Delivery'::text as delivery,
+                attribs->'Wi-Fi'::text as wifi,
+                attribs->'Good For'->>'dessert'::text as good_for_dessert,
+                attribs->'Good For'->>'latenight'::text as good_for_latenight,
+                attribs->'Good For'->>'lunch'::text as good_for_lunch,
+                attribs->'Good For'->>'dinner'::text as good_for_dinner,
+                attribs->'Good For'->>'brunch'::text as good_for_brunch,
+                attribs->'Good For'->>'breakfast'::text as good_for_breakfest,
+                attribs->'Ambience'->>'romantic'::text as ambiance_romantic,
+                attribs->'Ambience'->>'intimate'::text as ambiance_intimate,
+                attribs->'Ambience'->>'classy'::text as ambiance_classy,
+                attribs->'Ambience'->>'classy'::text as ambiance_classy,
+                attribs->'Ambience'->>'hipster'::text as ambiance_hipser,
+                attribs->'Ambience'->>'divey'::text as ambiance_divey,
+                attribs->'Ambience'->>'touristy'::text as ambiance_touristy,
+                attribs->'Ambience'->>'trendy'::text as ambiance_trendy,
+                attribs->'Ambience'->>'upscale'::text as ambiance_upscale,
+                attribs->'Ambience'->>'casual'::text as ambiance_casual,
+                attribs->'Parking'->>'garage'::text as parking_garage,
+                attribs->'Parking'->>'street'::text as parking_street,
+                attribs->'Parking'->>'validated'::text as parking_validated,
+                attribs->'Parking'->>'lot'::text as parking_lot,
+                attribs->'Parking'->>'valet'::text as parking_valet,
+                attribs->'Music'->>'dj'::text as music_dj,
+                attribs->'Music'->>'video'::text as music_video,
+                attribs->'Music'->>'jukebox'::text as music_jukebox,
+                attribs->'Music'->>'live'::text as music_live,
+                attribs->'Music'->>'background_music'::text as music_background,
+                attribs->'Music'->>'karaoke'::text as music_karaoke,
+                open,
+                ARRAY(select name from categories c where c.business_id = b.business_id) as categories
+                from businesses b"
+buss.rs = query(business_sql)
 buss = dbFetch(buss.rs, -1)
 ```
 
@@ -28,66 +95,75 @@ buss = dbFetch(buss.rs, -1)
 
 * City
 * State
-* Longitute/Latitude
+* Longitude/Latitude
 * Stars
 * Review_count
 * Neighborhoods
 * Attributes
+* Categories (restaurant, bar, )
 * Open
-
-#### Quiz
-
-```{r}
-
-has.wifi.attr <- function(jsontext) {
-  attr <- fromJSON(jsontext)
-  'Wi-Fi' %in% names(attr)
-}
-has.wifi <- sapply(buss$attribs, has.wifi.attr)
-num.has.wifi <- sum(has.wifi)
-has.wifi.attr.free <- function(jsontext) {
-  attr <- fromJSON(jsontext)
-  if (is.null(attr['Wi-Fi'])){
-    return(FALSE)
-  }
-  else {
-    return(attr['Wi-Fi'] == "free")
-  }
-}
-has.wifi.free <- sapply(buss$attribs, has.wifi.attr.free)
-```
 
 #### Review_count-Stars relationship
 
 ```{r}
-with(buss, plot(review_counts, stars))
+p1 <- qplot(stars, data=buss, geom="bar")
+p2 <- qplot(stars, review_count, data=buss, color=country)
+multiplot(p1, p2, cols=2)
+
+qplot(stars, review_count, data=buss, geom="jitter")
 ```
 
 
-#### Neighborhood-Stars relationship
+## Influence of Friendships on later Reviews
+
+Questions
+
+1. Welche Texteigenschaften von Reviews haben groesseren Einfluss auf die Ratings von Freunden?
+  - Das kann an einem Testdatensatz gelernt und dann an Pruefdatensatz gemessen werden: 
+    - Guetemass = Korrelation von prognostiziertem Star-Rating mit tatsaechlichem
+2. Vorbedingungen/Vorfragen
+  - Texteigenschaften heraussuchen
+  - Haben Freunde, die gleiche Businesses bewerten, aehnlichere Bewertungen als nicht-befreundete Besucher/Bewerter?
+  - Hat vorangehender User ueberhaupt einen Einfluss auf die nachfolgenden Bewertungen seiner Freunde
+  - Unterscheided sich dieser Einfluss vom Einfluss des Vorangehenden die nachfolgenden Bewertungen _nicht befreundeter_ Users
+  
+
+To explore:
+
+a. Wie viele Businesses werden von befreundeten Usern bewertet? --> dies ergibt den Datensatz fuer alle nachfolgenden Analysen
+b. Haeufigkeitsverteilung davon: x-Achse = Anzahl Freunde, die 1,2, 3, n Businesses beurteilen, y-Achse: Anzahl Businesses, die von 1, 2, 3, n Freunden bewertet wurden.
+c. Vergleiche die Varianzen der Bewertungen eines Business, die von Freunden gemacht wurden, mit jenen, die von nicht-befreundeten Usern gemacht wurden: sollte kleiner sein.
+d. Andernfalls: beruecksichtige nur Bewertungen unter Freunden, die einem Zeitfenster x-nach der ersten Bewertung stattfanden.
+
+### a. How many businesses are reviewed by friends?
 
 ```{r}
 
-busns <- 
+buss.num.friends <- read.csv("./dataset_yelp_challenge/business_friends_groups.csv", header=FALSE, sep=",")
+names(buss.num.friends) <- c('business_id', 'name', 'state', 'stars', 'review_count', 'neighborhoods', 'max_groupsize')
+
+qplot(buss.num.friends$max_groupsize, geom="histogram", binwidth = 1) 
+summary(buss.num.friends$max_groupsize)
+buss.num.friends.1 <- buss.num.friends
+buss.num.friends.1$one <- 1
+ggplot(data=buss.num.friends.1, aes(x=one,y=max_groupsize)) + geom_boxplot()
+```
+
+The vast majority of the business is rated by be zero friends: just one or no person at all.
+
+But there are still thousends of business reviewed by 2 or more friends:
+```{r}
+buss.reviewed.by.friends <- buss.num.friends[ buss.num.friends$max_groupsize > 1, c("business_id", 'max_groupsize') ]
+nrow(buss.reviewed.by.friends)
+
+# Save this dataset back to the db
+db.write.table( buss.reviewed.by.friends, 'businesses_with_friends' )
 ```
 
 
-#### Regression: Neighborhood, Review_count on Stars
+## Using iGraph to detect communities based on the friends relations
 
 ```{r}
-summary(buss)
-```
-
-#### Attributes-Stars relationship
-
-```{r}
-summary(cars)
-```
-
-You can also embed plots, for example:
-
-```{r, echo=FALSE}
-plot(cars)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+library(igraph)
+friendships <- query.result('select user_id, friend_id from friendships')
+graph <- graph_from_edgelist(as.matrix(friendships))

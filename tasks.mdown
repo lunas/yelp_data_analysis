@@ -24,6 +24,9 @@
   * 45 checkins
   * 495k tips
 
+#### Fragen
+
+* Hab
 ## 2. Exploratory Analysis
 
 1. Explore the relationships between different features in each data file.
@@ -33,3 +36,12 @@
 5. Many features incorporate free-text data that may need to be parsed, summarized, or quantified in some way. What is the best way to handle these data?
 
 
+# Potentielle Fragen
+
+* Hat Anzahl Freunde einen Einfluss 
+  - auf Beliebtheit (Compliments) eines Users
+  - Hoehe der Stars in den Reviews, die ein User vergibt
+
+GRAPH detection packet in R: http://igraph.org/r/
+
+http://igraph.wikidot.com/community-detection-in-r#toc2
