@@ -11,6 +11,8 @@ output: html_document
 # Some links:
 # - All categories: https://www.yelp.com/developers/documentation/v2/all_category_list
 
+setwd('Documents/ml/datascience/capstone-project/')
+
 # load libraries
 library(ggplot2)
 source('utils.R')
@@ -81,6 +83,8 @@ buss = dbFetch(buss.rs, -1)
 
 # Exploratory Analysis
 
+Tasks:
+
 1. Explore the relationships between different features in each data file.
 2. Try linking data files together and explore the relationships between features across data files.
 3. Identify interesting outcomes that you may want to predict as part of a prediction question / problem
@@ -114,56 +118,75 @@ qplot(stars, review_count, data=buss, geom="jitter")
 ```
 
 
-## Influence of Friendships on later Reviews
+## Influences on the reviews' star ratings
 
 Questions
 
-1. Welche Texteigenschaften von Reviews haben groesseren Einfluss auf die Ratings von Freunden?
-  - Das kann an einem Testdatensatz gelernt und dann an Pruefdatensatz gemessen werden: 
-    - Guetemass = Korrelation von prognostiziertem Star-Rating mit tatsaechlichem
-2. Vorbedingungen/Vorfragen
-  - Texteigenschaften heraussuchen
-  - Haben Freunde, die gleiche Businesses bewerten, aehnlichere Bewertungen als nicht-befreundete Besucher/Bewerter?
-  - Hat vorangehender User ueberhaupt einen Einfluss auf die nachfolgenden Bewertungen seiner Freunde
-  - Unterscheided sich dieser Einfluss vom Einfluss des Vorangehenden die nachfolgenden Bewertungen _nicht befreundeter_ Users
-  
+1. Is the star-rating a reviewer gives influenced by the current average star rating a business has got at the time of the new review?
+2. Is this influence stronger than the influence of other factors, as measured by multiple regression; factors:
+  - the city
+  - neighboorhoods
+  - various attributes; candidates?
+  - the number of reviews a business already has
+3. Are ratings that _differ_ from the avg (as for example measured by standard deviations) rated as more "useful", or maybe "cool"?  
 
-To explore:
+3. **Alternative question:** Influence of outstanding (negative or positive) ratings on following ratings
+  - depending on the outstanding rating's attributes (votes) and its user's compliments 
 
-a. Wie viele Businesses werden von befreundeten Usern bewertet? --> dies ergibt den Datensatz fuer alle nachfolgenden Analysen
-b. Haeufigkeitsverteilung davon: x-Achse = Anzahl Freunde, die 1,2, 3, n Businesses beurteilen, y-Achse: Anzahl Businesses, die von 1, 2, 3, n Freunden bewertet wurden.
-c. Vergleiche die Varianzen der Bewertungen eines Business, die von Freunden gemacht wurden, mit jenen, die von nicht-befreundeten Usern gemacht wurden: sollte kleiner sein.
-d. Andernfalls: beruecksichtige nur Bewertungen unter Freunden, die einem Zeitfenster x-nach der ersten Bewertung stattfanden.
+## Explore questions 1 and 2
 
-### a. How many businesses are reviewed by friends?
-
+Get a list (dataframe) of all reviews ordered by business and review date. For each review, also show the average rating of the business and the number of reviews for this business. 
 ```{r}
 
-buss.num.friends <- read.csv("./dataset_yelp_challenge/business_friends_groups.csv", header=FALSE, sep=",")
-names(buss.num.friends) <- c('business_id', 'name', 'state', 'stars', 'review_count', 'neighborhoods', 'max_groupsize')
+sql <- "SELECT r.business_id, r.review_id, r.user_id, r.date, r.stars,
+        (r.votes->'funny')::text::int as funny, 
+        (r.votes->'useful')::text::int as useful, 
+        (r.votes->'cool')::text::int as cool,
+          (SELECT ARRAY[ avg(r2.stars), count(r2.id) ] 
+           FROM reviews r2
+           WHERE r2.business_id = r.business_id
+           AND r2.date < r.date) AS avg_count_sofar
+        FROM reviews r
+        ORDER BY r.business_id, r.date"    
+ratings <- query.result(sql)
 
-qplot(buss.num.friends$max_groupsize, geom="histogram", binwidth = 1) 
-summary(buss.num.friends$max_groupsize)
-buss.num.friends.1 <- buss.num.friends
-buss.num.friends.1$one <- 1
-ggplot(data=buss.num.friends.1, aes(x=one,y=max_groupsize)) + geom_boxplot()
+# Split avg_count_sofar strings into to separate columns
+avg_count <- strsplit( gsub("[{}]", '', ratings[,'avg_count_sofar']), ',' )
+avgs   <- sapply(avg_count, function(cv){ return( as.numeric(cv[1]) ) })
+counts <- sapply(avg_count, function(cv){ return( as.numeric(cv[2]) ) })
+ratings$avg_rating_sofar  <- avgs
+ratings$num_ratings_sofar <- counts
+
+head(ratings)
 ```
 
-The vast majority of the business is rated by be zero friends: just one or no person at all.
+Checkout the correlation between the current rating average and the new rating for the second rating, the third, and so on.
 
-But there are still thousends of business reviewed by 2 or more friends:
+First: There are no missings in for the stars and their averages/counts (except that the first review doesn't have an average of the previous ratings):
 ```{r}
-buss.reviewed.by.friends <- buss.num.friends[ buss.num.friends$max_groupsize > 1, c("business_id", 'max_groupsize') ]
-nrow(buss.reviewed.by.friends)
+num.missing.stars <- nrow( ratings[is.na(ratings$stars), ])
+num.missing.avg.stars.sofar <- nrow( ratings[is.na(ratings$avg_rating_sofar) && ratings$num_ratings_sofar>0, ])
+num.missing.num.ratings.sofar <- nrow( ratings[is.na(ratings$num_ratings_sofar), ])
 
-# Save this dataset back to the db
-db.write.table( buss.reviewed.by.friends, 'businesses_with_friends' )
+sprintf("num.missing.stars: %d", num.missing.stars)
+sprintf("num.missing.avg.stars.sofar: %d", num.missing.avg.stars.sofar)
+sprintf("num.missing.num.ratings.sofar: %d", num.missing.num.ratings.sofar)
 ```
 
-
-## Using iGraph to detect communities based on the friends relations
-
+Correlations of new rating with average of previous ones, depending on the number of the ratings (second, third, forth, etc):
 ```{r}
-library(igraph)
-friendships <- query.result('select user_id, friend_id from friendships')
-graph <- graph_from_edgelist(as.matrix(friendships))
+rating_nums <- 2:max(ratings$num_ratings_sofar)
+cors <- sapply(rating_nums, function(i){
+  current.sofar <- ratings[ratings$num_ratings_sofar == i, c('stars', 'avg_rating_sofar')]
+  return( cor(current.sofar$stars, current.sofar$avg_rating_sofar))
+})
+plot(rating_nums, cors)
+
+rating.cors <- cbind(rating_nums, cors)
+write.table(rating.cors, "rating_correlations.csv", sep=";", row.names = FALSE)  # save for later
+```
+
+There seems to be correlation, roughly around 0.4. The variance in the correlations grows with the number of reviews, the tendency seems to be the more reviews, the higher the correlations. Let's put a regression line into this plot:
+```{r}
+
+p <- ggplot(rating.cors, aes(rating_nums, cors, colour = cut))
