@@ -129,8 +129,9 @@ Questions
   - various attributes; candidates?
   - the number of reviews a business already has
 3. Are ratings that _differ_ from the avg (as for example measured by standard deviations) rated as more "useful", or maybe "cool"?  
+4. If there is a correlation between new rating and average of hitherto ratings, then the first explanation of course is the characteristics of the business (say a 'good' business will attract high ratings, both in the average an for the new one). To distinguish those two factors, only correlation the new rating with an average of a window of the last L ratings (say L=10)
 
-3. **Alternative question:** Influence of outstanding (negative or positive) ratings on following ratings
+B. **Alternative question:** Influence of outstanding (negative or positive) ratings on following ratings
   - depending on the outstanding rating's attributes (votes) and its user's compliments 
 
 ## Explore questions 1 and 2
@@ -182,11 +183,54 @@ cors <- sapply(rating_nums, function(i){
 })
 plot(rating_nums, cors)
 
-rating.cors <- cbind(rating_nums, cors)
+rating.cors <- as.data.frame( cbind(rating_nums, cors) )
+rating.cors <- rating.cors[ ! is.na(rating.cors$cors), ]
+
 write.table(rating.cors, "rating_correlations.csv", sep=";", row.names = FALSE)  # save for later
 ```
 
 There seems to be correlation, roughly around 0.4. The variance in the correlations grows with the number of reviews, the tendency seems to be the more reviews, the higher the correlations. Let's put a regression line into this plot:
 ```{r}
+p <- ggplot(rating.cors, aes(x = rating_nums, y = cors))
+p <- p + layer(geom = "point") + geom_smooth()
+p
+```
+Appearantly, the correlations tend towards zero with the very high numbers of reviews (more than 3000).
 
-p <- ggplot(rating.cors, aes(rating_nums, cors, colour = cut))
+Is this because there are only view ratings with such high numbers of reviews?
+```{r}
+# Histograms for each thousend group of num-reviews:
+rating.cors$groups <- sapply(rating.cors$rating_nums, function(n){ return(n %/%1000 + 1) })
+p <- ggplot(rating.cors, aes(x=cors)) + geom_histogram() + facet_grid(groups ~ .)
+p
+
+rating.cors$num_reviews <- sapply(rating.cors$rating_nums, function(n){
+  num.reviews <- nrow( ratings[ ratings$num_ratings_sofar == n, ] )
+  return(num.reviews)
+})
+
+write.table(rating.cors, "rating_correlations.csv", sep=";", row.names = FALSE)  # save for later
+```
+
+Split up the number of reviews that were used in the calculation of a given correlation into groups.
+
+A quick power calculation using a alpha of 0.05, a power of 0.8, a desired effect size (r) of 0.3 ("medium strength correlation"), we get a minimum number of observations of n = 84.
+```{r}
+library(pwr)
+print( pwr.r.test(n=NULL, r=0.3, sig.level=0.05, power = 0.8) )
+```
+
+So cut up the num_reviews variable in a factor like this, as we need > 84 to discover a reasonable correlation:
+```{r}
+rating.cors$num_reviews_cut <- cut(rating.cors$num_reviews, c(0, 90,64000))
+```
+And add use this factor to color the graph:
+```{r}
+p <- ggplot(rating.cors, aes(x = rating_nums, y = cors, colour=num_reviews_cut))
+p <- p + layer(geom = "point") + geom_smooth()
+p
+```
+
+So the correlations seems to be around 0.4 if there are enough observations to interpret a correlation.
+
+
