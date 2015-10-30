@@ -129,7 +129,7 @@ Questions
   - various attributes; candidates?
   - the number of reviews a business already has
 3. Are ratings that _differ_ from the avg (as for example measured by standard deviations) rated as more "useful", or maybe "cool"?  
-4. If there is a correlation between new rating and average of hitherto ratings, then the first explanation of course is the characteristics of the business (say a 'good' business will attract high ratings, both in the average an for the new one). To distinguish those two factors, only correlation the new rating with an average of a window of the last L ratings (say L=10)
+4. If there is a correlation between new rating and average of hitherto ratings, then the first explanation of course is the characteristics of the business (say a 'good' business will attract high ratings, both in the average an for the new one). To distinguish those two factors, only correlate the new rating with an average of a window of the last L ratings (say L=10), and correct for the "general influence of the business" as measured by the average of rest of the reviews, i.e. the older reviews (those happening before the onset of the window).
 
 B. **Alternative question:** Influence of outstanding (negative or positive) ratings on following ratings
   - depending on the outstanding rating's attributes (votes) and its user's compliments 
@@ -137,7 +137,7 @@ B. **Alternative question:** Influence of outstanding (negative or positive) rat
 ## Explore questions 1 and 2
 
 Get a list (dataframe) of all reviews ordered by business and review date. For each review, also show the average rating of the business and the number of reviews for this business. 
-```{r}
+```{r, cache=TRUE}
 
 sql <- "SELECT r.business_id, r.review_id, r.user_id, r.date, r.stars,
         (r.votes->'funny')::text::int as funny, 
@@ -175,7 +175,7 @@ sprintf("num.missing.num.ratings.sofar: %d", num.missing.num.ratings.sofar)
 ```
 
 Correlations of new rating with average of previous ones, depending on the number of the ratings (second, third, forth, etc):
-```{r}
+```{r, cache=TRUE}
 rating_nums <- 2:max(ratings$num_ratings_sofar)
 cors <- sapply(rating_nums, function(i){
   current.sofar <- ratings[ratings$num_ratings_sofar == i, c('stars', 'avg_rating_sofar')]
@@ -210,6 +210,9 @@ rating.cors$num_reviews <- sapply(rating.cors$rating_nums, function(n){
 })
 
 write.table(rating.cors, "rating_correlations.csv", sep=";", row.names = FALSE)  # save for later
+# so we can read ratings.cors back with:
+# rating.cors <- read.table('./rating_correlations.csv', sep=";", col.name = TRUE)
+
 ```
 
 Split up the number of reviews that were used in the calculation of a given correlation into groups.

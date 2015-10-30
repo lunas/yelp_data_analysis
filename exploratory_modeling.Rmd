@@ -1,0 +1,70 @@
+---
+title: "Exploratory Modeling"
+author: "Lukas Nick"
+date: "30. Oktoober 2015"
+output: html_document
+---
+
+```{r}
+setwd('Documents/ml/datascience/capstone-project/')
+
+# load libraries
+library(ggplot2)
+source('utils.R')
+source('db.R')
+
+
+```
+
+
+# Exploratory Modeling
+
+## Question 1: Is the star-rating a reviewer gives influenced by the current average star rating a business has got at the time of the new review?
+
+### Is there a correlation between the new rating and the average of ratings so far?
+
+* show correlation plot with those correlations filtered out that have fewer than 90 cases
+* answer: yes, there is a correlation
+
+### Control for the "general influence" of the business
+
+* create 2 new variables: 
+  1. lastn: average rating of the last 10 (20?) reviews (or within last month? no: could be only very few)
+  2. baserate: average of all older ratings (from 0 to now - 10)
+* use theses two variables 
+
+```{r}
+
+NUM.RECENT.RATINGS = 10
+
+sql <- "SELECT r.business_id, 
+        array_to_string( array_agg( r.date || ';' || r.stars ), ',') as ratings, 
+        count(r.id) as num_reviews
+        FROM (SELECT business_id, date, stars, id 
+              FROM reviews 
+              ORDER BY business_id, date ASC) r 
+        GROUP BY r.business_id
+        ORDER BY r.business_id"
+agg.ratings <- query.result(sql)
+
+# extract the information stored in the ratings field and created separate fields
+calculate_avgs <- function(rating_string) {
+  ratings <- (strsplit(rating_string, ',', fixed=T))[[1]]
+  num.ratings <- length(ratings)
+  base.range <- 1 : (num.ratings-NUM.RECENT.RATINGS)
+  recent.range <- (num.ratings-NUM.RECENT.RATINGS+1) : num.ratings
+  base.ratings <- ratings[base.range]
+  recent.ratings <- ratings[recent.range]
+  base.avg   <- mean(sapply(base.ratings,   function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
+  recent.avg <- mean(sapply(recent.ratings, function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
+  last.rating <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][2] )
+  return( cbind(base.avg, recent.avg, last.rating) )
+}
+
+# drop businesses with fewer then 2xNUM.RECENT.RATINGS
+agg.ratings <- agg.ratings[ agg.ratings$num_reviews > 2*NUM.RECENT.RATINGS, ]
+agg.ratings[,4:6] <- t(sapply( agg.ratings$ratings, calculate_avgs ))
+names(agg.ratings)[4:6] <- cbind("base.avg.rating", "recent.avg.rating", "last.rating")
+
+```
+
