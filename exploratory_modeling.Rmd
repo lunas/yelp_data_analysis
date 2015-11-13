@@ -12,8 +12,7 @@ setwd('Documents/ml/datascience/capstone-project/')
 library(ggplot2)
 source('utils.R')
 source('db.R')
-
-
+source('multiplot.R')
 ```
 
 
@@ -31,7 +30,7 @@ source('db.R')
 * create 2 new variables: 
   1. lastn: average rating of the last 10 (20?) reviews (or within last month? no: could be only very few)
   2. baserate: average of all older ratings (from 0 to now - 10)
-* use theses two variables 
+* use these two variables 
 
 ```{r}
 
@@ -68,3 +67,125 @@ names(agg.ratings)[4:6] <- cbind("base.avg.rating", "recent.avg.rating", "last.r
 
 ```
 
+Correlate current rating with base-rating and recent ratings
+
+Plot base avg. rating and recent avg rating per stars (last-rating):
+```{r}
+p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100) 
+p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100)
+multiplot(p1, p2, cols = 2)
+```
+
+```{r}
+library(Hmisc)
+# use Spearman correlation since last.rating isn't normally distributed at all
+rcorr(as.matrix(agg.ratings[,c("base.avg.rating", "recent.avg.rating", "last.rating")]), type="spearman")
+```
+
+Single regression of average ratings of the business on the last.rating:
+```{r}
+lm.stars.base <- lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating)
+summary( lm.stars.base )
+```
+
+Single regression of average recent ratings on the last.rating:
+```{r}
+summary( lm(agg.ratings$last.rating ~ agg.ratings$recent.avg.rating))
+```
+
+Multiple regression to control for the "business base rate" (captured by "base.avg.rating"):
+```{r}
+summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
+```
+
+Is the base.avg.rating term even necessary?
+```{r}
+fit1 <- lm( last.rating ~ recent.avg.rating, data=agg.ratings)
+fit2 <- update( fit1, lm( last.rating ~ recent.avg.rating + base.avg.rating, data=agg.ratings) )
+anova(fit1, fit2)
+
+# and the other way?
+fit1r <- lm( last.rating ~ base.avg.rating, data=agg.ratings)
+fit2r <- update( fit1r, lm( last.rating ~ base.avg.rating + recent.avg.rating, data=agg.ratings) )
+anova(fit1r, fit2r)
+
+```
+
+Using Multiple Regression is not really correct because the outcome variable, the stars rating, is discrete, not normally distributed, and can go only from 1 to 5.
+More appropriate would be a ordered logistic regression.
+
+```{r}
+# Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
+
+# First add a new variable to agg.ratings that is just last.rating converted to a factor, since polr requires this
+agg.ratings$stars <- as.factor(agg.ratings$last.rating)
+library(MASS)
+m <- polr(stars ~ base.avg.rating + recent.avg.rating, data = agg.ratings, Hess=TRUE)
+summary(m)
+
+# Calculate p-values for the coefficients:
+coefficients <- coef(summary(m))
+
+# calculate and store p values
+p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
+# combined table
+(coefficients <- cbind(coefficients, "p value" = p))
+# Get confidence intervals for the coefficients: 
+(ci <- confint(m)) # default method gives profiled CIs
+```
+
+So the confidence interval for the coefficient of base.avg.rating includes 0, we cannot consider it different from 0. 
+The coefficient of recent.avg.rating though seems to be different from 0.
+
+This says that for a one unit increase in the recent.avg.rating, we can assume a 1.5 increase in the expected value of last.rating on the log odds scale, //if// base.avg.rating is kept constant.
+
+Convert the log odds ratios to the easier interpretable Odds Ratios:
+```{r}
+
+# odds ratios
+exp(coef(m))
+# Confidence intervals for the odds ratios
+exp(cbind(OR = coef(m), ci))
+```
+
+Since only the coefficient of recent.avg.rating seems to significant, let's only look at this one:
+
+If the value of recent.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is multiplied by roughly 4.3. (??)
+
+## Model assumption testing (exclude this)
+
+The ordered logit regression assumes that the "steps" between 1 and 2 stars, 2 and 3 stars, etc, are equal (the "proportional odds assumption"), so there is only one coefficient. Graph Is this assumption appropriate? 
+
+```{r}
+sf <- function(y) {
+  c('Y>=1' = qlogis(mean(y >= 1)),
+    'Y>=2' = qlogis(mean(y >= 2)),
+    'Y>=3' = qlogis(mean(y >= 3)),
+    'Y>=4' = qlogis(mean(y >= 4)),
+    'Y>=5' = qlogis(mean(y >= 5)))
+}
+
+(s <- with(agg.ratings, summary(as.numeric(stars) ~ base.avg.rating + recent.avg.rating, fun=sf)))
+
+# 
+
+glm(I(as.numeric(stars) >= 2) ~ base.avg.rating, family="binomial", data = agg.ratings)
+
+```
+
+
+
+
+## Other regression factors, from businesses
+
+Possible factors:
+
+* business category: why should there be a difference?
+* city: too many cities, many of them with too few businesses + same question as w/ categories
+* state: similar problem; therefore:
+* country; but see categories
+* the number of reviews a business already has
+
+
+```{r}
+```
