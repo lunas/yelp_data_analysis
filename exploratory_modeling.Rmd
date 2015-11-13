@@ -37,9 +37,9 @@ source('multiplot.R')
 NUM.RECENT.RATINGS = 10
 
 sql <- "SELECT r.business_id, 
-        array_to_string( array_agg( r.date || ';' || r.stars ), ',') as ratings, 
+        array_to_string( array_agg( r.date || ';' || r.stars || ';' || r.useful ), ',') as ratings, 
         count(r.id) as num_reviews
-        FROM (SELECT business_id, date, stars, id 
+        FROM (SELECT business_id, date, stars, (votes->>'useful')::text::int as useful, id 
               FROM reviews 
               ORDER BY business_id, date ASC) r 
         GROUP BY r.business_id
@@ -56,16 +56,17 @@ calculate_avgs <- function(rating_string) {
   recent.ratings <- ratings[recent.range]
   base.avg   <- mean(sapply(base.ratings,   function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
   recent.avg <- mean(sapply(recent.ratings, function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
-  last.rating <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][2] )
-  return( cbind(base.avg, recent.avg, last.rating) )
+  last.rating <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][2] )  # stars of latest rating
+  useful      <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][3] )  # usefulness of latest rating
+  return( cbind(base.avg, recent.avg, last.rating, useful) )
 }
 
 # drop businesses with fewer then 2xNUM.RECENT.RATINGS
 agg.ratings <- agg.ratings[ agg.ratings$num_reviews > 2*NUM.RECENT.RATINGS, ]
-agg.ratings[,4:6] <- t(sapply( agg.ratings$ratings, calculate_avgs ))
-names(agg.ratings)[4:6] <- cbind("base.avg.rating", "recent.avg.rating", "last.rating")
+agg.ratings[,4:7] <- t(sapply( agg.ratings$ratings, calculate_avgs ))
+names(agg.ratings)[4:7] <- cbind("base.avg.rating", "recent.avg.rating", "last.rating", "useful")
 
-```
+  ```
 
 Correlate current rating with base-rating and recent ratings
 
@@ -184,7 +185,12 @@ Possible factors:
 * city: too many cities, many of them with too few businesses + same question as w/ categories
 * state: similar problem; therefore:
 * country; but see categories
-* the number of reviews a business already has
+* the number of reviews a business already has  <-- ONLY THIS ONE
+
+## Are ratings that differ from the recent.avg.rating voted as more 'useful'?
+  
+* calculate difference of new rating and recent.avg.rating in terms of stdev
+* correlate with 'useful'ness
 
 
 ```{r}
