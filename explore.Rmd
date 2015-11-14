@@ -20,10 +20,10 @@ source('db.R')
 
 # Load businesses table
 business_sql = "select id, business_id, name, full_address, city, state, 
-                CASE WHEN state = ANY('{\"BW\",\"RP\"}'::text[]) THEN 'DE'
-                     WHEN state = ANY('{\"EDH\",\"ELN\",\"FIF\",\"HAM\",\"KHL\",\"MLN\",\"SCB\",\"XGL\"}'::text[]) THEN 'GB'
-                     WHEN state = ANY('{\"ON\",\"QC\"}'::text[]) THEN 'CA'
-                     ELSE 'US' END as country,
+                    CASE WHEN state IN ('BW', 'RP') THEN 'DE'             
+                    WHEN state IN ('EDH', 'ELN', 'FIF','HAM', 'KHL', 'MLN', 'SCB','XGL') THEN 'GB'
+                    WHEN state IN ('ON','QC') THEN 'CA'
+                    ELSE 'US' END as country,
                 longitude, latitude, stars, review_count, 
                 attribs->'By Appointment Only'::text as appointment,
                 attribs->'Alcohol'::text as alcohol,
