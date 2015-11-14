@@ -1,0 +1,188 @@
+---
+title: "Exploratory Modeling"
+author: "Lukas Nick"
+date: "30. Oktoober 2015"
+output: html_document
+---
+
+```{r}
+setwd('Documents/ml/datascience/capstone-project/')
+
+# load libraries
+library(ggplot2)
+source('utils.R')
+source('db.R')
+source('multiplot.R')
+```
+
+# Questions
+
+1. Is the star-rating a reviewer gives influenced by the current average star rating a business has got at the time of the new review?
+2. If there is an influence of earlier ratings on a new rating, is it bigger than the influence of the number of reviews at the time of the new rating?
+3. Are ratings that differ from the average rating for this business rated more or less 'useful'?
+
+# Modeling
+
+## Question 1: Is the star-rating a reviewer gives influenced by the current average star rating a business has got at the time of the new review?
+
+### Is there a correlation between the new rating and the average of ratings so far?
+
+* show correlation plot with those correlations filtered out that have fewer than 90 cases
+* answer: yes, there is a correlation
+
+### Control for the "general influence" of the business
+
+* create 2 new variables: 
+  1. lastn: average rating of the last 10 (20?) reviews (or within last month? no: could be only very few)
+  2. baserate: average of all older ratings (from 0 to now - 10)
+* use these two variables 
+
+```{r}
+
+NUM.RECENT.RATINGS = 10
+
+sql <- "SELECT rb.business_id, 
+        array_to_string( array_agg( rb.date || ';' || rb.stars || ';' || rb.useful || ';' || rb.state ), ',') as ratings, 
+        count(rb.id) as num_reviews
+        FROM (SELECT r.business_id, r.date, r.stars, (votes->>'useful')::text::int as useful, b.state, r.id 
+              FROM reviews r INNER JOIN businesses b USING (business_id) 
+              ORDER BY business_id, date ASC) rb 
+        GROUP BY rb.business_id
+        ORDER BY rb.business_id"
+agg.ratings <- query.result(sql)
+
+# extract the information stored in the ratings field and created separate fields
+calculate_avgs <- function(rating_string) {
+  ratings <- (strsplit(rating_string, ',', fixed=T))[[1]]
+  num.ratings <- length(ratings)
+  base.range <- 1 : (num.ratings-NUM.RECENT.RATINGS)
+  recent.range <- (num.ratings-NUM.RECENT.RATINGS+1) : num.ratings
+  base.ratings <- ratings[base.range]
+  recent.ratings <- ratings[recent.range]
+  base.avg   <- mean(sapply(base.ratings,   function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
+  recent.avg <- mean(sapply(recent.ratings, function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
+  last.rating <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][2] )  # stars of latest rating
+  useful      <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][3] )  # usefulness of latest rating
+  state       <- ( strsplit( ratings[1], ';')[[1]][4] )            # state of first rating (the same for all ratings)
+  #return( cbind(base.avg, recent.avg, last.rating, useful, state) )
+  return( list(base.avg = base.avg, recent.avg = recent.avg, last.rating = last.rating, useful=useful, state=state))
+}
+
+# drop businesses with fewer then 2xNUM.RECENT.RATINGS
+agg.ratings <- agg.ratings[ agg.ratings$num_reviews > 2*NUM.RECENT.RATINGS, ]
+calculated.cols <- t(sapply( agg.ratings$ratings, calculate_avgs ))
+row.names(calculated.cols) <- c()  # remove the row names
+calculated.df <- as.data.frame(calculated.cols)
+agg.ratings[,4:8] <- calculated.df
+names(agg.ratings)[4:8] <- cbind("base.avg.rating", "recent.avg.rating", "last.rating", "useful", "state")
+
+```
+
+Correlate current rating with base-rating and recent ratings
+
+Plot base avg. rating and recent avg rating per stars (last-rating):
+```{r}
+p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100) 
+p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100)
+multiplot(p1, p2, cols = 2)
+```
+
+```{r}
+library(Hmisc)
+# use Spearman correlation since last.rating isn't normally distributed at all
+rcorr(as.matrix(agg.ratings[,c("base.avg.rating", "recent.avg.rating", "last.rating")]), type="spearman")
+```
+
+Multiple regression to control for the "business base rate" (captured by "base.avg.rating"):
+```{r}
+summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
+```
+
+Is the base.avg.rating term even necessary?
+```{r}
+fit1 <- lm( last.rating ~ recent.avg.rating, data=agg.ratings)
+fit2 <- update( fit1, lm( last.rating ~ recent.avg.rating + base.avg.rating, data=agg.ratings) )
+anova(fit1, fit2)
+
+# and the other way?
+fit1r <- lm( last.rating ~ base.avg.rating, data=agg.ratings)
+fit2r <- update( fit1r, lm( last.rating ~ base.avg.rating + recent.avg.rating, data=agg.ratings) )
+anova(fit1r, fit2r)
+
+```
+
+-> No.
+
+Using Multiple Regression is not really correct because the outcome variable, the stars rating, is discrete, not normally distributed, and can go only from 1 to 5.
+More appropriate would be a ordered logistic regression.
+
+```{r}
+# Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
+
+# First add a new variable to agg.ratings that is just last.rating converted to a factor, since polr requires this
+agg.ratings$stars <- as.factor(agg.ratings$last.rating)
+library(MASS)
+m <- polr(stars ~ base.avg.rating + recent.avg.rating, data = agg.ratings, Hess=TRUE)
+summary(m)
+
+# Calculate p-values for the coefficients:
+coefficients <- coef(summary(m))
+
+# calculate and store p values
+p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
+# combined table
+(coefficients <- cbind(coefficients, "p value" = p))
+# Get confidence intervals for the coefficients: 
+(ci <- confint(m)) # default method gives profiled CIs
+```
+
+So the confidence interval for the coefficient of base.avg.rating includes 0, we cannot consider it different from 0. 
+The coefficient of recent.avg.rating though seems to be different from 0.
+
+This says that for a one unit increase in the recent.avg.rating, we can assume a 1.5 increase in the expected value of last.rating on the log odds scale, //if// base.avg.rating is kept constant.
+
+Convert the log odds ratios to the easier interpretable Odds Ratios:
+```{r}
+
+# odds ratios
+exp(coef(m))
+# Confidence intervals for the odds ratios
+exp(cbind(OR = coef(m), ci))
+```
+
+Since only the coefficient of recent.avg.rating seems to significant, let's only look at this one:
+
+If the value of recent.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is multiplied by roughly 4.3. (??)
+
+
+## Influence of state and the number of reviews at the time of the last rating
+
+```{r}
+m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num_reviews, data = agg.ratings, Hess=TRUE)
+summary(m2)
+
+# Calculate p-values for the coefficients:
+coefficients2 <- coef(summary(m2))
+
+# calculate and store p values
+p2 <- pnorm(abs(coefficients2[, "t value"]), lower.tail = FALSE) * 2
+# combined table
+(coefficients2 <- cbind(coefficients2, "p value" = p2))
+# Get confidence intervals for the coefficients: 
+(ci2 <- confint(m2)) # default method gives profiled CIs
+
+# odds ratios
+exp(coef(m2))
+# Confidence intervals for the odds ratios
+exp(cbind(OR = coef(m2), ci2))
+
+```
+
+## Are ratings that differ from the recent.avg.rating voted as more 'useful'?
+  
+* calculate difference of new rating and recent.avg.rating in terms of stdev
+* correlate with 'useful'ness
+
+
+```{r}
+```
