@@ -197,8 +197,18 @@ So number of reviews and country don't affect the rating, and the relations betw
 valid.sds <- which(agg.ratings$recent.sd > 0)
 agg.ratings.with.sd <- agg.ratings[ valid.sds, ]
 agg.ratings.with.sd$deviation <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) / agg.ratings.with.sd$recent.sd
+agg.ratings.with.sd$diff <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) 
+
+p1 <- ggplot(agg.ratings.with.sd, aes(deviation, useful)) + geom_point()
+p2 <- ggplot(agg.ratings.with.sd, aes(diff, useful)) + geom_point()
+multiplot(p1, p2, cols = 2)
 
 cor(agg.ratings.with.sd$deviation, agg.ratings.with.sd$useful)
+cor(agg.ratings.with.sd$diff, agg.ratings.with.sd$useful)
+
+rcorr(as.matrix(agg.ratings.with.sd[,c("deviation", "diff", "useful")]), type="spearman")
 ```
 
 There is no correlation between the deviation of the last rating form the recent average and the 'usefulness', i.e. the number of times a review got the vote 'useful'.
+
+But graphically it looks like differing ratings tend to be less likely to get voted as 'useful', and, correspondingly, ratings that agree with older ratings tend to get more 'useful' votes.
