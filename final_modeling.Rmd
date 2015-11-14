@@ -42,9 +42,13 @@ source('multiplot.R')
 NUM.RECENT.RATINGS = 10
 
 sql <- "SELECT rb.business_id, 
-        array_to_string( array_agg( rb.date || ';' || rb.stars || ';' || rb.useful || ';' || rb.state ), ',') as ratings, 
-        count(rb.id) as num_reviews
-        FROM (SELECT r.business_id, r.date, r.stars, (votes->>'useful')::text::int as useful, b.state, r.id 
+        array_to_string( array_agg( rb.date || ';' || rb.stars || ';' || rb.useful || ';' || rb.country ), ',') as ratings, 
+        count(rb.id) as num_reviews    
+        FROM (SELECT r.business_id, r.date, r.stars, (votes->>'useful')::text::int as useful, b.state, r.id,
+              CASE WHEN state IN ('BW', 'RP') THEN 'DE'             
+                   WHEN state IN ('EDH', 'ELN', 'FIF','HAM', 'KHL', 'MLN', 'SCB','XGL') THEN 'GB'
+                   WHEN state IN ('ON','QC') THEN 'CA'
+                   ELSE 'US' END as country
               FROM reviews r INNER JOIN businesses b USING (business_id) 
               ORDER BY business_id, date ASC) rb 
         GROUP BY rb.business_id
@@ -55,17 +59,16 @@ agg.ratings <- query.result(sql)
 calculate_avgs <- function(rating_string) {
   ratings <- (strsplit(rating_string, ',', fixed=T))[[1]]
   num.ratings <- length(ratings)
-  base.range <- 1 : (num.ratings-NUM.RECENT.RATINGS)
-  recent.range <- (num.ratings-NUM.RECENT.RATINGS+1) : num.ratings
+  base.range <- 1 : (num.ratings-NUM.RECENT.RATINGS-1)
+  recent.range <- (num.ratings-NUM.RECENT.RATINGS) : (num.ratings -1)
   base.ratings <- ratings[base.range]
   recent.ratings <- ratings[recent.range]
   base.avg   <- mean(sapply(base.ratings,   function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
   recent.avg <- mean(sapply(recent.ratings, function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
-  last.rating <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][2] )  # stars of latest rating
-  useful      <- as.numeric( strsplit( ratings[ length(ratings) ], ';')[[1]][3] )  # usefulness of latest rating
-  state       <- ( strsplit( ratings[1], ';')[[1]][4] )            # state of first rating (the same for all ratings)
-  #return( cbind(base.avg, recent.avg, last.rating, useful, state) )
-  return( list(base.avg = base.avg, recent.avg = recent.avg, last.rating = last.rating, useful=useful, state=state))
+  last.rating <- as.numeric( strsplit( ratings[ num.ratings ], ';')[[1]][2] )  # stars of latest rating
+  useful      <- as.numeric( strsplit( ratings[ num.ratings ], ';')[[1]][3] )  # usefulness of latest rating
+  country     <- ( strsplit( ratings[1], ';')[[1]][4] )            # country of first rating (the same for all ratings) 
+  return( list(base.avg = base.avg, recent.avg = recent.avg, last.rating = last.rating, useful=useful, country=country))
 }
 
 # drop businesses with fewer then 2xNUM.RECENT.RATINGS
@@ -74,7 +77,13 @@ calculated.cols <- t(sapply( agg.ratings$ratings, calculate_avgs ))
 row.names(calculated.cols) <- c()  # remove the row names
 calculated.df <- as.data.frame(calculated.cols)
 agg.ratings[,4:8] <- calculated.df
-names(agg.ratings)[4:8] <- cbind("base.avg.rating", "recent.avg.rating", "last.rating", "useful", "state")
+names(agg.ratings)[4:8] <- cbind("base.avg.rating", "recent.avg.rating", "last.rating", "useful", "country")
+# convert lists to numeric/character:
+agg.ratings$base.avg.rating <- as.numeric(agg.ratings$base.avg.rating)
+agg.ratings$recent.avg.rating <- as.numeric(agg.ratings$recent.avg.rating)
+agg.ratings$last.rating <- as.numeric(agg.ratings$last.rating)
+agg.ratings$useful <- as.numeric(agg.ratings$useful)
+agg.ratings$country <- as.character(agg.ratings$country)
 
 ```
 
@@ -98,20 +107,15 @@ Multiple regression to control for the "business base rate" (captured by "base.a
 summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
 ```
 
-Is the base.avg.rating term even necessary?
+Is the recent.avg.rating term even necessary?
 ```{r}
-fit1 <- lm( last.rating ~ recent.avg.rating, data=agg.ratings)
-fit2 <- update( fit1, lm( last.rating ~ recent.avg.rating + base.avg.rating, data=agg.ratings) )
-anova(fit1, fit2)
-
-# and the other way?
 fit1r <- lm( last.rating ~ base.avg.rating, data=agg.ratings)
 fit2r <- update( fit1r, lm( last.rating ~ base.avg.rating + recent.avg.rating, data=agg.ratings) )
 anova(fit1r, fit2r)
 
 ```
 
--> No.
+-> Yes.
 
 Using Multiple Regression is not really correct because the outcome variable, the stars rating, is discrete, not normally distributed, and can go only from 1 to 5.
 More appropriate would be a ordered logistic regression.
@@ -136,8 +140,7 @@ p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
 (ci <- confint(m)) # default method gives profiled CIs
 ```
 
-So the confidence interval for the coefficient of base.avg.rating includes 0, we cannot consider it different from 0. 
-The coefficient of recent.avg.rating though seems to be different from 0.
+So both the 'base rating' and the recent avg rating 'influence a new rating: the confidence interval for both variables doesn't include 0.
 
 This says that for a one unit increase in the recent.avg.rating, we can assume a 1.5 increase in the expected value of last.rating on the log odds scale, //if// base.avg.rating is kept constant.
 
@@ -150,15 +153,20 @@ exp(coef(m))
 exp(cbind(OR = coef(m), ci))
 ```
 
-Since only the coefficient of recent.avg.rating seems to significant, let's only look at this one:
+If the value of base.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is doubled. 
+Similarily, if the value of recent.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is multiplied by 1.8.
 
-If the value of recent.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is multiplied by roughly 4.3. (??)
 
+## Influence of country and the number of reviews at the time of the last rating
 
-## Influence of state and the number of reviews at the time of the last rating
+Since there is only data for 2 German businesses, exclude them:
+```{r}
+table(agg.ratings$country)
+```
+
 
 ```{r}
-m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num_reviews, data = agg.ratings, Hess=TRUE)
+m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num_reviews + country, data = agg.ratings[ agg.ratings$country != 'DE', ], Hess=TRUE)
 summary(m2)
 
 # Calculate p-values for the coefficients:
@@ -178,6 +186,8 @@ exp(cbind(OR = coef(m2), ci2))
 
 ```
 
+So number of reviews and country don't affect the rating, and the relations between both the base average rating and recent average rating with a new rating hold, even if we control for the number of reviews and country.
+
 ## Are ratings that differ from the recent.avg.rating voted as more 'useful'?
   
 * calculate difference of new rating and recent.avg.rating in terms of stdev
@@ -185,4 +195,6 @@ exp(cbind(OR = coef(m2), ci2))
 
 
 ```{r}
+
+# n=25, bar=3.357143, rar=3.5, r=2, useful=0, US
 ```
