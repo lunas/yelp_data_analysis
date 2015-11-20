@@ -129,9 +129,17 @@ To calculate averages of the latest 20 ratings and meaningful averages of the ev
 head(agg.ratings[,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')])
 ```
 
-The last column, 'recent.sd', contains the standard deviation of the 20 most recent ratings. It will be used to calculate the deviation of the latest rating from the 20 most recent ratings in terms of their standard calculation.
+The last column, 'recent.sd', contains the standard deviation of the 20 most recent ratings. It is used to calculate the deviation of the latest rating from the 20 most recent ratings in terms of their standard calculation.
+```{r, echo=FALSE}
+valid.sds <- which(agg.ratings$recent.sd > 0)
+agg.ratings.with.sd <- agg.ratings[ valid.sds, ]
+agg.ratings.with.sd$deviation <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) / agg.ratings.with.sd$recent.sd
+agg.ratings.with.sd$diff <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) 
+```
 
 ## Data exploration
+
+### Base, recent and new ratings
 
 ```{r, echo=FALSE}
 h2 <- qplot(base.avg.rating,   data = agg.ratings, geom = "histogram")
@@ -193,6 +201,8 @@ anova(fit1r, fit2r)
 
 -> Yes.
 
+### Deviation and usefulness
+
 As an additional question, we want to know whether deviating ratings are considered more useful. What is the distribution of these variables?
 ```{r, echo=FALSE}
 h4 <- qplot(useful,            data = agg.ratings, geom = "histogram") 
@@ -200,9 +210,11 @@ h5 <- qplot(recent.sd,         data = agg.ratings, geom = "histogram")
 multiplot(h4, h5, cols=2)
 ```
 
-Is there any hint of a relationship graphically?
+Both the 'deviation' (difference between latest rating and recent average rating in terms of standard deviation within the recent averate rating) and the 'difference' (absolute difference between the latest rating and the recent average rating) were calculated. Let's look at their relationship with the number of time a rating was considered 'useful':
 ```{r, echo=FALSE}
-qplot(abs(agg.ratings$recent.avg.rating - agg.ratings$last.rating), agg.ratings$useful)
+p1 <- ggplot(agg.ratings.with.sd, aes(deviation, useful)) + geom_point()
+p2 <- ggplot(agg.ratings.with.sd, aes(diff, useful)) + geom_point()
+multiplot(p1, p2, cols = 2)
 ```
 
 This looks rather as if less deviation ratings were voted more 'useful'.
@@ -232,7 +244,7 @@ The variable ``country`` was not included in the model since exploratory analysi
 
 ### Deviations of latest rating and 'usefulness'
 
-Finally, to see whether ratings that differ from earlier ratings are voted more often as 'useful', the difference of the latest rating in terms of the standard deviation of the 20 most recent ratings was calculated. This new variable, dubbed simply 'deviation', was then correlation with the number the latest rating got voted as 'useful'.
+Finally, to see whether ratings that differ from earlier ratings are voted more often as 'useful', the difference of the latest rating in terms of the standard deviation of the 20 most recent ratings was calculated. This new variable, dubbed simply 'deviation', was then correlation with the number the latest rating got voted as 'useful'. The Spearman correlation was used because of the non-normal distribution of the variable 'useful'.
 
 # Results
 
@@ -270,124 +282,35 @@ Likewise, an increase in the recent average rating of one star raises the _odds_
 
 Both these odds have a confidence intervall way above one, as opposed to the number of reviews: with 95% probability, one more review does not change the odds of the latest review to have any higher star rating.
 
+##  Deviations of latest rating and 'usefulness'
 
-[Describe what you found through your analysis of the data]
+The graphical evaluation in the exploratory analysis hinted at a negative relationship between deviation of latest rating from recent average rating and 'usefulness' of the latest rating. The Spearman method reveals no correlation that could be considered 'significant' in any meaningful way:
 
--> Is the primary statistical model, statistical inference or prediction output in the results summarized and interpreted or is raw output given without description or interpretation?
-  -> 1: The results are summarized and interpreted in a useful way
-
--> Is there a description of how the results relate to the primary questions of interest, or is it otherwise clear? In other words, do not give a point if the results seem unrelated to the question of interest and there is no apparent relationship.
-  -> Was the primary question of interest answered / refuted or was there a description of why no clear answer could be obtained?
-  
--> https://class.coursera.org/dsscapstone-005/wiki/Yelp_Final_Project_Rubric
+```{r}
+#cor(agg.ratings.with.sd$deviation, agg.ratings.with.sd$useful)
+#cor(agg.ratings.with.sd$diff, agg.ratings.with.sd$useful)
+rcorr(as.matrix(agg.ratings.with.sd[,c("deviation", "diff", "useful")]), type="spearman")
+```
 
   
 # Discussion
 
-Explain how you interpret the results of your analysis and what the implications are for your question/problem.
+The main question of this study is whether the recent ratings have an influence on a new rating and whether this influence is not entirely predicted by the 'base rating' for a business. In other words, even if a business is rated in general as, say, "good", do the recent ratings influence a new rating. To control this 'base rating' of a business, the 20 most recent ratings were separated from all the older ratings, i.e. an average was calculated for both older base rating and the 20 most recent ratings (except the very latest rating). Then a multiple regression model was fitted, using ordered logit regression, to estimate the influence of the recent rating on to the latest rating, controlling for the base rating.
 
+The model coefficients from the fitted model hint at an influence of both the base and the recent average rating on the new (latest) rating. But the recent average rating does have a significant (even bigger) influence on the new rating, even when controlling for the business' base rating. Therefore we can say, yes, recent ratings do influence new ratings, independently of whether how the business is rated in general.
 
-Problems with Ologit:
+The number of reviews a business has at the time of the latest rating does not seem to have any relevance on a new rating.
 
-* proportional odds assumption not tested here - just assumed
-* Diagnostics: Doing diagnostics for non-linear models is difficult, and ordered logit/probit models are even more difficult than binary models.
+There are though a couple of problems that with this Ordered Logit Regression:
 
-------------------------------------
+* this method assumes that the coefficients that describe the relationship between a 1-star rating and any higher rating is the same as between a 1-or-2-star rating and any higher rating (the "proportional odds assumption"). This assumption has not been tested here.
+* it is difficult to come up with diagnostics for the model fitted here. I don't know _how_ fit it is.
 
+The strong significance of the coefficients related to the main question of this study indicate though, that the hypothesized relationship of recent ratings and new ratings helds, controlled for the business' base rating.
 
+One should keep in mind though, that this data is purely 'correlational', not causal.
 
-
-```{r}
-# Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
-
-# First add a new variable to agg.ratings that is just last.rating converted to a factor, since polr requires this
-agg.ratings$stars <- as.factor(agg.ratings$last.rating)
-library(MASS)
-m <- polr(stars ~ base.avg.rating + recent.avg.rating, data = agg.ratings, Hess=TRUE)
-summary(m)
-
-# Calculate p-values for the coefficients:
-coefficients <- coef(summary(m))
-
-# calculate and store p values
-p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
-# combined table
-(coefficients <- cbind(coefficients, "p value" = p))
-# Get confidence intervals for the coefficients: 
-(ci <- confint(m)) # default method gives profiled CIs
-```
-
-So both the 'base rating' and the recent avg rating 'influence a new rating: the confidence interval for both variables doesn't include 0.
-
-This says that for a one unit increase in the recent.avg.rating, we can assume a 1.5 increase in the expected value of last.rating on the log odds scale, //if// base.avg.rating is kept constant.
-
-Convert the log odds ratios to the easier interpretable Odds Ratios:
-```{r}
-
-# odds ratios
-exp(coef(m))
-# Confidence intervals for the odds ratios
-exp(cbind(OR = coef(m), ci))
-```
-
-If the value of base.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is multiplied by 1.8
-Similarily, if the value of recent.avg.rating moves one unit (e.g. from 1 to 2), the odds of moving from a 1-star last.rating to a higher rating is roughly doubled.
-
-
-## Influence of country and the number of reviews at the time of the last rating
-
-
-```{r}
-
-m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num.reviews + country, data = agg.ratings[ agg.ratings$country != 'DE', ], Hess=TRUE)
-summary(m2)
-
-# Calculate p-values for the coefficients:
-coefficients2 <- coef(summary(m2))
-
-# calculate and store p values
-p2 <- pnorm(abs(coefficients2[, "t value"]), lower.tail = FALSE) * 2
-# combined table
-(coefficients2 <- cbind(coefficients2, "p value" = p2))
-# Get confidence intervals for the coefficients: 
-(ci2 <- confint(m2)) # default method gives profiled CIs
-
-# odds ratios
-exp(coef(m2))
-# Confidence intervals for the odds ratios
-exp(cbind(OR = coef(m2), ci2))
-
-```
-
-So number of reviews and country don't affect the rating, and the relations between both the base average rating and recent average rating with a new rating hold, even if we control for the number of reviews and country.
-
-## Are ratings that differ from the recent.avg.rating voted as more 'useful'?
-  
-* calculate difference of new rating and recent.avg.rating in terms of stdev
-* correlate with 'useful'ness
-
-
-```{r}
-valid.sds <- which(agg.ratings$recent.sd > 0)
-agg.ratings.with.sd <- agg.ratings[ valid.sds, ]
-agg.ratings.with.sd$deviation <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) / agg.ratings.with.sd$recent.sd
-agg.ratings.with.sd$diff <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) 
-
-p1 <- ggplot(agg.ratings.with.sd, aes(deviation, useful)) + geom_point()
-p2 <- ggplot(agg.ratings.with.sd, aes(diff, useful)) + geom_point()
-multiplot(p1, p2, cols = 2)
-
-cor(agg.ratings.with.sd$deviation, agg.ratings.with.sd$useful)
-cor(agg.ratings.with.sd$diff, agg.ratings.with.sd$useful)
-
-rcorr(as.matrix(agg.ratings.with.sd[,c("deviation", "diff", "useful")]), type="spearman")
-```
-
-There is no correlation between the deviation of the last rating form the recent average and the 'usefulness', i.e. the number of times a review got the vote 'useful'.
-
-But graphically it looks like differing ratings tend to be less likely to get voted as 'useful', and, correspondingly, ratings that agree with older ratings tend to get more 'useful' votes.
-
-
+A secondary question was studied, namely whether new ratings that diverge from the average of the recent ratings are considered more 'useful' by other Yelp users. Correlational results don't indiciate that there is any such relationship. Visual results hint at the possibility of a non-linear relationship between deviation and 'usefulness' (see section "Deviation and usefulness" in "Data and Methods") which a correlation would fail to discover.
 
 # References
 
