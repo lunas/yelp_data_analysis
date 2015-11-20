@@ -1,14 +1,36 @@
 ---
-title: "Report"
+title: "Influence of Recent Ratings on New Ratings in Yelp Business Reviews"
 author: "Lukas Nick"
-date: "30. Oktoober 2015"
-output: html_document
+references:
+- author:
+  - family: Asch
+    given: S. E.
+  container-title: G. E. Swanson, T. M. Newcomb & E. L. Hartley (Eds.), Readings in
+    social psychology (2nd ed., pp. 2-11).
+  id: aesch
+  issued:
+    year: 1952
+  publisher: New York:NY Holt
+  title: Effects of group pressure on the modification and distortion of judgements
+  type: book
+- URL: https://en.wikipedia.org/wiki/Ordered_logit
+  author:
+  - family: Wikipedia
+  id: wikipedia
+  title: Ordered Logit
+- URL: http://www.ats.ucla.edu/stat/r/dae/ologit.htm
+  author:
+  - family: idre
+    given: UCLA
+  id: ologit
+  title: R Data Analysis Examples - Ordinal Logistic Regression
+output: pdf_document
 ---
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, include=FALSE}
 
 # Setup
-setwd('Documents/ml/datascience/capstone-project/')
+setwd('~/Documents/ml/datascience/capstone-project/')
 
 # load libraries
 library(ggplot2)
@@ -22,50 +44,35 @@ library(MASS)
 
 # Title
 
-[A brief description of what you've done]
-
-This study evaluates whether a new star rating is related to the average of older ratings. It also considers whether this relationship is stronger than the country factor or the number of reviews at the time of the new rating. 
+This study evaluates whether a new star rating is related to the average of older ratings. It also considers whether this relationship depends on the country or the number of reviews at the time of the new rating. 
 
 Furthermore, it addresses the question whether ratings that deviate from the average of the earlier ratings are more often voted as 'useful' than non deviating ratings.
 
-The first two questions are tackled using ordered logit models, the third question simply correlations the deviation of a new rating with the number of 'useful' votes that rating got.
+The first two questions are tackled using ordered logit models, the third question simply calculates a correlation.
 
 # Introduction
 
-[A description of the question/problem and the rationale for studying it]
-
-Most users of Yelp, when they review a business and judge it with a rating (i.e. a number of "stars" between 1 and 5), they have already seen the older reviews of that business, since they are displayed on the same page. Social Psychology suggests that other people's opinions influence ones own judgment (see, among many, for example [^aesch](Aesch, 1952)). Therefore it seems reasonable to assume that older ratings, corresponding to other people's options, could influence a user's new rating.
+Most users of Yelp, when they review a business and judge it with a rating (i.e. a number of "stars" between 1 and 5), have already seen the older reviews of that business, since they are displayed on the same page. Social Psychology suggests that other people's opinions influence ones own judgment; see, among many, for example [@aesch]. Therefore it seems reasonable to assume that older ratings, corresponding to other people's options, could influence a user's new rating.
 
 If that was the case, designers of Yelp or similar services that use any kind of rating might want to look into ways of "blind" voting, so that new raters can see other users' ratings only _after_ having stated their own rating.
 
-On obvious problem when comparing previous ratings with new ratings is that we have to assume a "business factor" influencing both previous ratings and older ratings: if the business is, let's say, in general "good", then both previous and the new user will tend to rate it higher, and vice versa. We therefore need a way to seperate a general "business factor" from a "social factor".
+On obvious problem when comparing previous ratings with new ratings is that we have to assume a "business factor" influencing both previous ratings and older ratings: if the business is, let's say, in general "good", then both previous users and the new user will tend to rate it higher, and vice versa. We therefore need a way to seperate a general "business factor" from a "social factor".
 
-To achieve this, two measures of previous ratings were calculated: the average of the last 20 ratings (named the "recent average rating"), and the average of all the older ratings (named "base average rating"). The base average rating is thought to represent the "general business factor", and the recent average rating is considered the one that has some social influence (assuming that rarely users go further back than one page to look at older ratings, especially on a mobile device).
+To achieve this, two measures of previous ratings were calculated: the average of the last 20 ratings (named the "recent average rating"), and the average of the rest of the older ratings (named "base average rating"). The base average rating is thought to represent the "general business factor", and the recent average rating is considered the one that has some social influence (assuming that rarely users go further back than one page to look at older ratings, especially on a mobile device).
 
 Those two factors were distinguished with a multivariate model.
 
-<Was there exploratory data analysis (plots, summary tables) presented that interrogates the question of interest?>
-
-< 
-  -> show histogram of stars
-  -> show double-plot last.rating vs bar & rar 
-  
-  
->
-
 # Methods and Data
-
-[Describe how you used the data and the type of analytic methods that you used; it's okay to be a bit technical here but clarity is important]
 
 ## Dataset
 
-To study this question, I used the data from the [Yelp Dataset Challenge](http://www.yelp.com/dataset_challenge): it contains 1.5M reviews of 481 thousend businesses, by 366 thousend users. 
+I used the data from the [Yelp Dataset Challenge](http://www.yelp.com/dataset_challenge): it contains 1.5M reviews of 481 thousend businesses, by 366 thousend users. 
 
-To better handle this amount of data, I used a small [Rails application](https://github.com/lunas/yelp_seeder) to seed the data (that is available in JSON format) into a PostgreSQL database.
+To better handle this amount of data, I programmed a small [Rails application](https://github.com/lunas/yelp_seeder) to seed the data (which is available in JSON format) into a PostgreSQL database.
 
-I then created a table that lists each business in a row, and in separate columns:
+I then created a table that lists each business in a row, and in separate columns contains:
 
-* the latest rating; this is the rating of the new user that will be compared to previous ratings
+* the latest rating; the rating of the new user that will be compared to previous ratings
 * the recent average rating: the average of the ratings of the most recent 21 reviews (excluding the latest rating)
 * the base average rating: the average of all older reviews (i.e. all ratings excluding the latest 21 ratings)
 * the number of reviews at the time of the latest rating
@@ -126,7 +133,8 @@ agg.ratings$country <- as.character(agg.ratings$country)
 
 To calculate averages of the latest 20 ratings and meaningful averages of the even older base ratings, we need businesses with at least 40 reviews (2 * 20). Therefore businesses with fewer reviews were filtered out.
 ```{r, echo=FALSE}
-head(agg.ratings[,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')])
+# head(agg.ratings[,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')])
+print(agg.ratings[1:5,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')], row.names=FALSE)
 ```
 
 The last column, 'recent.sd', contains the standard deviation of the 20 most recent ratings. It is used to calculate the deviation of the latest rating from the 20 most recent ratings in terms of their standard calculation.
@@ -141,7 +149,7 @@ agg.ratings.with.sd$diff <- abs(agg.ratings.with.sd$recent.avg.rating - agg.rati
 
 ### Base, recent and new ratings
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, message=FALSE}
 h2 <- qplot(base.avg.rating,   data = agg.ratings, geom = "histogram")
 h3 <- qplot(recent.avg.rating, data = agg.ratings, geom = "histogram")
 h4 <- qplot(last.rating, data = agg.ratings, geom = "histogram")
@@ -157,14 +165,15 @@ Amount of reviews per country:
 table(agg.ratings$country, agg.ratings$last.rating)
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE,include=FALSE}
 h1 <- qplot(log(last.rating),  data = agg.ratings, geom = "histogram", facets = country ~ .) + scale_y_continuous(trans = "log2")
-h1 
+# h1 
 ```
 
 The distribution of last.rating seems to be roughly similar in the USA, Canada and Great Britain. There are no german businesses any more: all of them had less than 40 reviews and were therefore filtered out.
 
 Plot the base.avg.rating and recent.avg.rating per stars (last-rating):
+
 ```{r, echo=FALSE}
 p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100) 
 p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100)
@@ -183,35 +192,26 @@ p <-ggplot(agg.ratings, aes(x = last.rating, y = recent.avg.rating)) +
 There seems to be a small correlation between the latest rating and the both the base average rating and the recent average rating.
 
 Let's calculate the Spearman correlation (since the latest rating is not normally distributed):
+
 ```{r, echo=FALSE}
 rcorr(as.matrix(agg.ratings[,c("base.avg.rating", "recent.avg.rating", "last.rating")]), type="spearman")
 ```
 
 To have a preliminary look at the interaction of those average ratings with the latest rating, let's do a quick multiple regression that predicts latest.rating by recent average rating and controls for base average rating:
-```{r}
+
+```{r, echo=FALSE}
 summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
 ```
 
-Is the recent.avg.rating term even necessary?
-```{r, echo=FALSE}
-fit1r <- lm( last.rating ~ base.avg.rating, data=agg.ratings)
-fit2r <- update( fit1r, lm( last.rating ~ base.avg.rating + recent.avg.rating, data=agg.ratings) )
-anova(fit1r, fit2r)
-```
-
--> Yes.
+Apparently the variable recent.avg.rating does add significantly to the model: it is not redunant even though we included the base average rating.
 
 ### Deviation and usefulness
 
-As an additional question, we want to know whether deviating ratings are considered more useful. What is the distribution of these variables?
-```{r, echo=FALSE}
-h4 <- qplot(useful,            data = agg.ratings, geom = "histogram") 
-h5 <- qplot(recent.sd,         data = agg.ratings, geom = "histogram") 
-multiplot(h4, h5, cols=2)
-```
+As an additional question, we want to know whether deviating ratings are considered more useful.
 
 Both the 'deviation' (difference between latest rating and recent average rating in terms of standard deviation within the recent averate rating) and the 'difference' (absolute difference between the latest rating and the recent average rating) were calculated. Let's look at their relationship with the number of time a rating was considered 'useful':
-```{r, echo=FALSE}
+
+```{r, echo=FALSE, message=FALSE}
 p1 <- ggplot(agg.ratings.with.sd, aes(deviation, useful)) + geom_point()
 p2 <- ggplot(agg.ratings.with.sd, aes(diff, useful)) + geom_point()
 multiplot(p1, p2, cols = 2)
@@ -225,7 +225,7 @@ Since the dependent variable, the latest rating, is discrete, not normally distr
 
 ### Ordered logistic regression
 
-Ordered logistic regression is a regression model for ordinal dependent variables* (as our ``latest.rating`` variable, the "stars" given in a review). It uses maximum likelihood to estimate the coefficients.
+Ordered logistic regression is a regression model for ordinal dependent variables (as our ``latest.rating`` variable, the "stars" given in a review). It uses maximum likelihood to estimate the coefficients [see @wikipedia; @ologit].
 
 ```{r, echo=FALSE}
 # Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
@@ -266,7 +266,8 @@ p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
 We see that both the base average rating and the recent average rating exhibit a significant influence on a new rating, whereas the number of reviews seems to be irrelevant.
 
 To easier interpret the coeffient, let's convert them to odds rations and calculate there confidence intervals:
-```{r, echo=FALSE}
+
+```{r, echo=FALSE, message=FALSE}
 # Get confidence intervals for the coefficients: 
 ci <- confint(m) # default method gives profiled CIs
 
@@ -286,7 +287,7 @@ Both these odds have a confidence intervall way above one, as opposed to the num
 
 The graphical evaluation in the exploratory analysis hinted at a negative relationship between deviation of latest rating from recent average rating and 'usefulness' of the latest rating. The Spearman method reveals no correlation that could be considered 'significant' in any meaningful way:
 
-```{r}
+```{r, echo=FALSE}
 #cor(agg.ratings.with.sd$deviation, agg.ratings.with.sd$useful)
 #cor(agg.ratings.with.sd$diff, agg.ratings.with.sd$useful)
 rcorr(as.matrix(agg.ratings.with.sd[,c("deviation", "diff", "useful")]), type="spearman")
@@ -301,18 +302,16 @@ The model coefficients from the fitted model hint at an influence of both the ba
 
 The number of reviews a business has at the time of the latest rating does not seem to have any relevance on a new rating.
 
-There are though a couple of problems that with this Ordered Logit Regression:
+There are though a couple of drawbacks of this Ordered Logit Regression:
 
 * this method assumes that the coefficients that describe the relationship between a 1-star rating and any higher rating is the same as between a 1-or-2-star rating and any higher rating (the "proportional odds assumption"). This assumption has not been tested here.
 * it is difficult to come up with diagnostics for the model fitted here. I don't know _how_ fit it is.
 
 The strong significance of the coefficients related to the main question of this study indicate though, that the hypothesized relationship of recent ratings and new ratings helds, controlled for the business' base rating.
 
-One should keep in mind though, that this data is purely 'correlational', not causal.
+Of course one should keep in mind, that this data is purely 'correlational', not causal.
 
 A secondary question was studied, namely whether new ratings that diverge from the average of the recent ratings are considered more 'useful' by other Yelp users. Correlational results don't indiciate that there is any such relationship. Visual results hint at the possibility of a non-linear relationship between deviation and 'usefulness' (see section "Deviation and usefulness" in "Data and Methods") which a correlation would fail to discover.
 
-# References
 
-[aesch]: Asch, S. E. (1952a). Effects of group pressure on the modification and distortion of judgements. In G. E. Swanson, T. M. Newcomb & E. L. Hartley (Eds.), Readings in social psychology (2nd ed., pp. 2???11). New York:NY Holt.
-[ologit]: See Wikipedia entry of "[Ordered Logit]"(https://en.wikipedia.org/wiki/Ordered_logit), and, more thoroughly: http://www.ats.ucla.edu/stat/r/dae/ologit.htm
+## References
