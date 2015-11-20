@@ -16,6 +16,7 @@ source('utils.R')
 source('db.R')
 source('multiplot.R')
 library(Hmisc)
+library(MASS)
 ```
 
 
@@ -69,7 +70,7 @@ I then created a table that lists each business in a row, and in separate column
 * the base average rating: the average of all older reviews (i.e. all ratings excluding the latest 21 ratings)
 * the number of reviews at the time of the latest rating
 * the number of times the latest rating got voted as 'useful'
-* the country of the business
+* the country of the business: either USA, Canada, Great Britain or Germany.
 
 ```{r, echo=FALSE, cache=TRUE}
 
@@ -123,7 +124,7 @@ agg.ratings$country <- as.character(agg.ratings$country)
 
 ```
 
-To calculate averages of the latest 20 ratings and meaningful averages of the even older base ratings, we need businesses with at least 40 reviews (2 * 20). Therefore businesses with viewer reviews were filtered out.
+To calculate averages of the latest 20 ratings and meaningful averages of the even older base ratings, we need businesses with at least 40 reviews (2 * 20). Therefore businesses with fewer reviews were filtered out.
 ```{r, echo=FALSE}
 head(agg.ratings[,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')])
 ```
@@ -153,13 +154,22 @@ h1 <- qplot(log(last.rating),  data = agg.ratings, geom = "histogram", facets = 
 h1 
 ```
 
-The distribution of last.rating seems to be roughly similar in the USA, Canada and Great Britain.
+The distribution of last.rating seems to be roughly similar in the USA, Canada and Great Britain. There are no german businesses any more: all of them had less than 40 reviews and were therefore filtered out.
 
-Plot base.avg.rating and recent.avg.rating per stars (last-rating):
+Plot the base.avg.rating and recent.avg.rating per stars (last-rating):
 ```{r, echo=FALSE}
 p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100) 
 p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100)
 multiplot(p1, p2, cols = 2)
+```
+
+```{r, echo=FALSE}
+p <-ggplot(agg.ratings, aes(x = last.rating, y = recent.avg.rating)) +
+      geom_boxplot(size = .75) +
+      geom_jitter(alpha = .5) +
+      facet_grid(country ~ ., margins = TRUE) +
+      theme(axis.text.x = element_text(hjust = 1, vjust = 1))
+# no need to print this one
 ```
 
 There seems to be a small correlation between the latest rating and the both the base average rating and the recent average rating.
@@ -179,7 +189,6 @@ Is the recent.avg.rating term even necessary?
 fit1r <- lm( last.rating ~ base.avg.rating, data=agg.ratings)
 fit2r <- update( fit1r, lm( last.rating ~ base.avg.rating + recent.avg.rating, data=agg.ratings) )
 anova(fit1r, fit2r)
-
 ```
 
 -> Yes.
@@ -196,26 +205,71 @@ Is there any hint of a relationship graphically?
 qplot(abs(agg.ratings$recent.avg.rating - agg.ratings$last.rating), agg.ratings$useful)
 ```
 
+This looks rather as if less deviation ratings were voted more 'useful'.
+
 ## Methods
-
-First, the base average rating, the recent average rating and the latest rating were simply correlated (using Spearman correlation, since the distribution of the latest rating is far from normal).
-
-To calculate the relationship between recent average rating and latest rating while controlling for the base average rating, a multiple regression was calculated.
 
 Since the dependent variable, the latest rating, is discrete, not normally distributed, and only ranges from 1 to 5, multiple regression is not the ideal method. Therefore an ordered logistic regression model was calculated.
 
--> more description of ologit!
+### Ordered logistic regression
 
--> Are all of the methods presented in the results section introduced in the methods section?
+Ordered logistic regression is a regression model for ordinal dependent variables* (as our ``latest.rating`` variable, the "stars" given in a review). It uses maximum likelihood to estimate the coefficients.
 
+```{r, echo=FALSE}
+# Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
 
+# First add a new variable to agg.ratings that is just last.rating converted to a factor, since polr requires this
+agg.ratings$stars <- as.factor(agg.ratings$last.rating)
+```
 
-To compare the the influence of the base average rating and the recent average rating with the influence of the country and the number of reviews at the time of the latest rating, those two additional variables were included to the ordered logit model as well.
+The function ``polr`` from the library MASS was used to estimate the coefficients of the ologit model. To compare the influence of the base average rating and the recent average rating with the influence of the number of reviews at the time of the latest rating, ``num.reviews`` was included in the ordered logit model as well.
 
-Finally, to see whether ratings that differ from earlier ratings are voted more often as 'useful', the difference of the latest rating in terms of the standard deviation of the most recent 20 ratings was calculated. This new variable, dubbed simply 'deviation', was then correlation with the number the latest rating got voted as 'useful'.
+```{r}
+m <- polr(stars ~ base.avg.rating + recent.avg.rating + num.reviews, data = agg.ratings, Hess=TRUE)
+```
 
+The variable ``country`` was not included in the model since exploratory analysis showed that the distribution of CA and USA looks very similar, and both CA and GB have to small cell sizes for the ologit model to be stable or meaningful.
+
+### Deviations of latest rating and 'usefulness'
+
+Finally, to see whether ratings that differ from earlier ratings are voted more often as 'useful', the difference of the latest rating in terms of the standard deviation of the 20 most recent ratings was calculated. This new variable, dubbed simply 'deviation', was then correlation with the number the latest rating got voted as 'useful'.
 
 # Results
+
+## Base average rating, recent average rating, number of reviews and the last rating
+
+```{r, echo=FALSE}
+# Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
+#summary(m)
+
+# Calculate p-values for the coefficients:
+coefficients <- coef(summary(m))
+
+# calculate and store p values
+p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
+# combined table
+(coefficients <- cbind(coefficients, "p value" = p))
+```
+
+We see that both the base average rating and the recent average rating exhibit a significant influence on a new rating, whereas the number of reviews seems to be irrelevant.
+
+To easier interpret the coeffient, let's convert them to odds rations and calculate there confidence intervals:
+```{r, echo=FALSE}
+# Get confidence intervals for the coefficients: 
+ci <- confint(m) # default method gives profiled CIs
+
+# odds ratios
+# exp(coef(m))
+# Confidence intervals for the odds ratios
+exp(cbind(OddsRatios = coef(m), ci))
+```
+
+So we can expect an increase in the base average rating of one start to increase the _odds_ for the lastest rating to get a higher star-rating to rise by 82%.
+
+Likewise, an increase in the recent average rating of one star raises the _odds_ for the latest rating to get a (any) higher rating more than twice (2.14).
+
+Both these odds have a confidence intervall way above one, as opposed to the number of reviews: with 95% probability, one more review does not change the odds of the latest review to have any higher star rating.
+
 
 [Describe what you found through your analysis of the data]
 
@@ -232,114 +286,16 @@ Finally, to see whether ratings that differ from earlier ratings are voted more 
 
 Explain how you interpret the results of your analysis and what the implications are for your question/problem.
 
+
+Problems with Ologit:
+
+* proportional odds assumption not tested here - just assumed
+* Diagnostics: Doing diagnostics for non-linear models is difficult, and ordered logit/probit models are even more difficult than binary models.
+
 ------------------------------------
 
-# Questions
 
-1. Is the star-rating a reviewer gives influenced by the current average star rating a business has got at the time of the new review?
-2. If there is an influence of earlier ratings on a new rating, is it bigger than the influence of the number of reviews at the time of the new rating?
-3. Are ratings that differ from the average rating for this business rated more or less 'useful'?
 
-# Modeling
-
-## Question 1: Is the star-rating a reviewer gives influenced by the current average star rating a business has got at the time of the new review?
-
-### Is there a correlation between the new rating and the average of ratings so far?
-
-* show correlation plot with those correlations filtered out that have fewer than 90 cases
-* answer: yes, there is a correlation
-
-### Control for the "general influence" of the business
-
-* create 2 new variables: 
-  1. lastn: average rating of the last 10 (20?) reviews (or within last month? no: could be only very few)
-  2. baserate: average of all older ratings (from 0 to now - 10)
-* use these two variables 
-
-```{r}
-
-NUM.RECENT.RATINGS = 20
-
-sql <- "SELECT rb.business_id, 
-        array_to_string( array_agg( rb.date || ';' || rb.stars || ';' || rb.useful || ';' || rb.country ), ',') as ratings, 
-        count(rb.id) as num.reviews    
-        FROM (SELECT r.business_id, r.date, r.stars, (votes->>'useful')::text::int as useful, b.state, r.id,
-              CASE WHEN state IN ('BW', 'RP') THEN 'DE'             
-                   WHEN state IN ('EDH', 'ELN', 'FIF','HAM', 'KHL', 'MLN', 'SCB','XGL') THEN 'GB'
-                   WHEN state IN ('ON','QC') THEN 'CA'
-                   ELSE 'US' END as country
-              FROM reviews r INNER JOIN businesses b USING (business_id) 
-              ORDER BY business_id, date ASC) rb 
-        GROUP BY rb.business_id
-        ORDER BY rb.business_id"
-agg.ratings <- query.result(sql)
-
-# extract the information stored in the ratings field and created separate fields
-calculate_avgs <- function(rating_string) {
-  ratings <- (strsplit(rating_string, ',', fixed=T))[[1]]
-  num.ratings <- length(ratings)
-  base.range <- 1 : (num.ratings-NUM.RECENT.RATINGS-1)
-  recent.range <- (num.ratings-NUM.RECENT.RATINGS) : (num.ratings -1)
-  base.ratings <- ratings[base.range]
-  recent.ratings <- ratings[recent.range]
-  base.avg   <- mean(sapply(base.ratings,   function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
-  recent.avg <- mean(sapply(recent.ratings, function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
-  recent.sd  <- sd(  sapply(recent.ratings, function(rtg){ return(as.numeric( strsplit(rtg, ';')[[1]][2] )) }))
-  last.rating <- as.numeric( strsplit( ratings[ num.ratings ], ';')[[1]][2] )  # stars of latest rating
-  useful      <- as.numeric( strsplit( ratings[ num.ratings ], ';')[[1]][3] )  # usefulness of latest rating
-  country     <- ( strsplit( ratings[1], ';')[[1]][4] )            # country of first rating (the same for all ratings) 
-  return( list(base.avg = base.avg, recent.avg = recent.avg, recent.sd = recent.sd, last.rating = last.rating, useful=useful, country=country))
-}
-
-# drop businesses with fewer then 2xNUM.RECENT.RATINGS
-agg.ratings <- agg.ratings[ agg.ratings$num.reviews > 2*NUM.RECENT.RATINGS, ]
-calculated.cols <- t(sapply( agg.ratings$ratings, calculate_avgs ))
-row.names(calculated.cols) <- c()  # remove the row names
-calculated.df <- as.data.frame(calculated.cols)
-agg.ratings[,4:9] <- calculated.df
-names(agg.ratings)[4:9] <- cbind("base.avg.rating", "recent.avg.rating", "recent.sd", "last.rating", "useful", "country")
-# convert lists to numeric/character:
-agg.ratings$base.avg.rating <- as.numeric(agg.ratings$base.avg.rating)
-agg.ratings$recent.avg.rating <- as.numeric(agg.ratings$recent.avg.rating)
-agg.ratings$recent.sd <- as.numeric(agg.ratings$recent.sd)
-agg.ratings$last.rating <- as.numeric(agg.ratings$last.rating)
-agg.ratings$useful <- as.numeric(agg.ratings$useful)
-agg.ratings$country <- as.character(agg.ratings$country)
-
-```
-
-Correlate current rating with base-rating and recent ratings
-
-Plot base avg. rating and recent avg rating per stars (last-rating):
-```{r}
-p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100) 
-p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100)
-multiplot(p1, p2, cols = 2)
-```
-
-```{r}
-library(Hmisc)
-# use Spearman correlation since last.rating isn't normally distributed at all
-rcorr(as.matrix(agg.ratings[,c("base.avg.rating", "recent.avg.rating", "last.rating")]), type="spearman")
-```
-
-Multiple regression to control for the "business base rate" (captured by "base.avg.rating"):
-```{r}
-summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
-```
-
-Is the recent.avg.rating term even necessary?
-```{r}
-fit1r <- lm( last.rating ~ base.avg.rating, data=agg.ratings)
-fit2r <- update( fit1r, lm( last.rating ~ base.avg.rating + recent.avg.rating, data=agg.ratings) )
-anova(fit1r, fit2r)
-
-```
-
--> Yes.
-
-Using Multiple Regression is not really correct because the outcome variable, the stars rating, is discrete, not normally distributed, and can go only from 1 to 5.
-More appropriate would be a ordered logistic regression.
 
 ```{r}
 # Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
@@ -382,7 +338,6 @@ Similarily, if the value of recent.avg.rating moves one unit (e.g. from 1 to 2),
 
 
 ```{r}
-table(agg.ratings$country)
 
 m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num.reviews + country, data = agg.ratings[ agg.ratings$country != 'DE', ], Hess=TRUE)
 summary(m2)
@@ -437,3 +392,4 @@ But graphically it looks like differing ratings tend to be less likely to get vo
 # References
 
 [aesch]: Asch, S. E. (1952a). Effects of group pressure on the modification and distortion of judgements. In G. E. Swanson, T. M. Newcomb & E. L. Hartley (Eds.), Readings in social psychology (2nd ed., pp. 2???11). New York:NY Holt.
+[ologit]: See Wikipedia entry of "[Ordered Logit]"(https://en.wikipedia.org/wiki/Ordered_logit), and, more thoroughly: http://www.ats.ucla.edu/stat/r/dae/ologit.htm
