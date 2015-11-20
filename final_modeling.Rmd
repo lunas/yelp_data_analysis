@@ -165,7 +165,7 @@ Similarily, if the value of recent.avg.rating moves one unit (e.g. from 1 to 2),
 ```{r}
 table(agg.ratings$country)
 
-m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num_reviews + country, data = agg.ratings[ agg.ratings$country != 'DE', ], Hess=TRUE)
+m2 <- polr(stars ~ base.avg.rating + recent.avg.rating + num_reviews + country, data = agg.ratings[ agg.ratings$country != 'GB', ], Hess=TRUE)
 summary(m2)
 
 # Calculate p-values for the coefficients:
