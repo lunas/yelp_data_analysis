@@ -1,0 +1,47 @@
+# Tasks
+
+## 1. Get the data
+
+* download
+* import to R: JSON, how to read this into R efficiently? -> see packages mentioned on course website
+* look at Metadata: 
+  * what features?
+  * what variables
+  * what files, which variables are where? How can I merge them?
+* Was fuer Fragen?
+
+
+### Answers
+
+#### Import to R
+
+* Create Postgres-DB and import data using a Ruby script
+* Then import the data I'll need w/ SQL queries
+* because Postgres can handle this amount of data more efficiently:
+  * 366K users
+  * 1'569K reviews
+  * 61k bussinesses
+  * 45 checkins
+  * 495k tips
+
+#### Fragen
+
+* Hab
+## 2. Exploratory Analysis
+
+1. Explore the relationships between different features in each data file.
+2. Try linking data files together and explore the relationships between features across data files.
+3. Identify interesting outcomes that you may want to predict as part of a prediction question / problem
+4. Characterize any missing data that may be present in each of the files
+5. Many features incorporate free-text data that may need to be parsed, summarized, or quantified in some way. What is the best way to handle these data?
+
+
+# Potentielle Fragen
+
+* Hat Anzahl Freunde einen Einfluss 
+  - auf Beliebtheit (Compliments) eines Users
+  - Hoehe der Stars in den Reviews, die ein User vergibt
+
+GRAPH detection packet in R: http://igraph.org/r/
+
+http://igraph.wikidot.com/community-detection-in-r#toc2
