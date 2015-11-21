@@ -43,9 +43,7 @@ library(MASS)
 ```
 
 
-# Title
-
-This study evaluates whether a new star rating is related to the average of older ratings. It also considers whether this relationship depends on the country or the number of reviews at the time of the new rating. Both questions are analysed using ordered logit models
+**Summary**: This study evaluates whether a new star rating is related to the average of older ratings. It also considers whether this relationship depends on the country or the number of reviews at the time of the new rating. Both questions are analysed using an ordered logit model. It's coefficients suggest a significant influence of recent ratings on new ratings, even when controlling for a general business factor as measured by the average of the older (i.e. not 'recent') ratings.
 
 # Introduction
 
