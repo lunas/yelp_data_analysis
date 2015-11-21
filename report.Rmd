@@ -24,6 +24,8 @@ references:
     given: UCLA
   id: ologit
   title: R Data Analysis Examples - Ordinal Logistic Regression
+fontsize: 7pt
+geometry: margin=1in  
 output: pdf_document
 ---
 
@@ -44,11 +46,7 @@ library(MASS)
 
 # Title
 
-This study evaluates whether a new star rating is related to the average of older ratings. It also considers whether this relationship depends on the country or the number of reviews at the time of the new rating. 
-
-Furthermore, it addresses the question whether ratings that deviate from the average of the earlier ratings are more often voted as 'useful' than non deviating ratings.
-
-The first two questions are tackled using ordered logit models, the third question simply calculates a correlation.
+This study evaluates whether a new star rating is related to the average of older ratings. It also considers whether this relationship depends on the country or the number of reviews at the time of the new rating. Both questions are analysed using ordered logit models
 
 # Introduction
 
@@ -132,28 +130,22 @@ agg.ratings$country <- as.character(agg.ratings$country)
 ```
 
 To calculate averages of the latest 20 ratings and meaningful averages of the even older base ratings, we need businesses with at least 40 reviews (2 * 20). Therefore businesses with fewer reviews were filtered out.
-```{r, echo=FALSE}
+```{r, echo=FALSE, comment=''}
 # head(agg.ratings[,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')])
-print(agg.ratings[1:5,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')], row.names=FALSE)
-```
-
-The last column, 'recent.sd', contains the standard deviation of the 20 most recent ratings. It is used to calculate the deviation of the latest rating from the 20 most recent ratings in terms of their standard calculation.
-```{r, echo=FALSE}
-valid.sds <- which(agg.ratings$recent.sd > 0)
-agg.ratings.with.sd <- agg.ratings[ valid.sds, ]
-agg.ratings.with.sd$deviation <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) / agg.ratings.with.sd$recent.sd
-agg.ratings.with.sd$diff <- abs(agg.ratings.with.sd$recent.avg.rating - agg.ratings.with.sd$last.rating) 
+for.display <- agg.ratings[1:5, c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating','country')]
+for.display$business_id <- paste( substr(for.display$business_id, 1, 9), '..', sep='' )
+colnames(for.display) <- c('busn.id', 'num.reviews', 'base.avg.rtg', 'recent.avg.rtg', 'latest rtg','country')
+print(for.display, row.names=FALSE)
 ```
 
 ## Data exploration
 
-### Base, recent and new ratings
+```{r, echo=FALSE, message=FALSE, fig.height=2.5}
 
-```{r, echo=FALSE, message=FALSE}
-h2 <- qplot(base.avg.rating,   data = agg.ratings, geom = "histogram")
-h3 <- qplot(recent.avg.rating, data = agg.ratings, geom = "histogram")
-h4 <- qplot(last.rating, data = agg.ratings, geom = "histogram")
-multiplot(h2, h4, h3, cols = 2)
+h2 <- qplot(base.avg.rating,   data = agg.ratings, geom = "histogram") + theme(axis.title=element_text(size=10))
+h3 <- qplot(recent.avg.rating, data = agg.ratings, geom = "histogram") + theme(axis.title=element_text(size=10))
+h4 <- qplot(last.rating, data = agg.ratings, geom = "histogram") + theme(axis.title=element_text(size=10))
+multiplot(h2, h3, h4, cols = 3)
 ```
 
 The distribution of both base.avg.rating and recent.avg.rating is close to a normal. Not so the distribution of the latest ratings.
@@ -174,9 +166,10 @@ The distribution of last.rating seems to be roughly similar in the USA, Canada a
 
 Plot the base.avg.rating and recent.avg.rating per stars (last-rating):
 
-```{r, echo=FALSE}
-p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100) 
-p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100)
+```{r, echo=FALSE, fig.height=2.5}
+
+p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100)   + theme(axis.title=element_text(size=10))
+p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100) + theme(axis.title=element_text(size=10))
 multiplot(p1, p2, cols = 2)
 ```
 
@@ -203,21 +196,7 @@ To have a preliminary look at the interaction of those average ratings with the 
 summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
 ```
 
-Apparently the variable recent.avg.rating does add significantly to the model: it is not redunant even though we included the base average rating.
-
-### Deviation and usefulness
-
-As an additional question, we want to know whether deviating ratings are considered more useful.
-
-Both the 'deviation' (difference between latest rating and recent average rating in terms of standard deviation within the recent averate rating) and the 'difference' (absolute difference between the latest rating and the recent average rating) were calculated. Let's look at their relationship with the number of time a rating was considered 'useful':
-
-```{r, echo=FALSE, message=FALSE}
-p1 <- ggplot(agg.ratings.with.sd, aes(deviation, useful)) + geom_point()
-p2 <- ggplot(agg.ratings.with.sd, aes(diff, useful)) + geom_point()
-multiplot(p1, p2, cols = 2)
-```
-
-This looks rather as if less deviation ratings were voted more 'useful'.
+Apparently the variable recent.avg.rating does add significantly to the model: it is not redundant even if we include the base average rating.
 
 ## Methods
 
@@ -242,13 +221,7 @@ m <- polr(stars ~ base.avg.rating + recent.avg.rating + num.reviews, data = agg.
 
 The variable ``country`` was not included in the model since exploratory analysis showed that the distribution of CA and USA looks very similar, and both CA and GB have to small cell sizes for the ologit model to be stable or meaningful.
 
-### Deviations of latest rating and 'usefulness'
-
-Finally, to see whether ratings that differ from earlier ratings are voted more often as 'useful', the difference of the latest rating in terms of the standard deviation of the 20 most recent ratings was calculated. This new variable, dubbed simply 'deviation', was then correlation with the number the latest rating got voted as 'useful'. The Spearman correlation was used because of the non-normal distribution of the variable 'useful'.
-
 # Results
-
-## Base average rating, recent average rating, number of reviews and the last rating
 
 ```{r, echo=FALSE}
 # Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
@@ -282,17 +255,6 @@ So we can expect an increase in the base average rating of one start to increase
 Likewise, an increase in the recent average rating of one star raises the _odds_ for the latest rating to get a (any) higher rating more than twice (2.14).
 
 Both these odds have a confidence intervall way above one, as opposed to the number of reviews: with 95% probability, one more review does not change the odds of the latest review to have any higher star rating.
-
-##  Deviations of latest rating and 'usefulness'
-
-The graphical evaluation in the exploratory analysis hinted at a negative relationship between deviation of latest rating from recent average rating and 'usefulness' of the latest rating. The Spearman method reveals no correlation that could be considered 'significant' in any meaningful way:
-
-```{r, echo=FALSE}
-#cor(agg.ratings.with.sd$deviation, agg.ratings.with.sd$useful)
-#cor(agg.ratings.with.sd$diff, agg.ratings.with.sd$useful)
-rcorr(as.matrix(agg.ratings.with.sd[,c("deviation", "diff", "useful")]), type="spearman")
-```
-
   
 # Discussion
 
@@ -310,8 +272,5 @@ There are though a couple of drawbacks of this Ordered Logit Regression:
 The strong significance of the coefficients related to the main question of this study indicate though, that the hypothesized relationship of recent ratings and new ratings helds, controlled for the business' base rating.
 
 Of course one should keep in mind, that this data is purely 'correlational', not causal.
-
-A secondary question was studied, namely whether new ratings that diverge from the average of the recent ratings are considered more 'useful' by other Yelp users. Correlational results don't indiciate that there is any such relationship. Visual results hint at the possibility of a non-linear relationship between deviation and 'usefulness' (see section "Deviation and usefulness" in "Data and Methods") which a correlation would fail to discover.
-
 
 ## References
