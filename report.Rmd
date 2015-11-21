@@ -200,7 +200,7 @@ Since the dependent variable, the latest rating, is discrete, not normally distr
 
 ### Ordered logistic regression
 
-Ordered logistic regression is a regression model for ordinal dependent variables (as our ``latest.rating`` variable, the "stars" given in a review). It uses maximum likelihood to estimate the coefficients [see @wikipedia; @ologit].
+Ordered logistic regression is a regression model for ordinal dependent variables (as our ``last.rating`` variable, the "stars" given in a review). It uses maximum likelihood to estimate the coefficients [see @wikipedia; @ologit].
 
 ```{r, echo=FALSE}
 # Following http://www.ats.ucla.edu/stat/r/dae/ologit.htm
@@ -254,13 +254,13 @@ Both these odds have a confidence intervall way above one, as opposed to the num
   
 # Discussion
 
-The main question of this study is whether the recent ratings have an influence on a new rating and whether this influence is not entirely predicted by the 'base rating' for a business. In other words, even if a business is rated in general as, say, "good", do the recent ratings influence a new rating. To control this 'base rating' of a business, the 20 most recent ratings were separated from all the older ratings, i.e. an average was calculated for both the older base rating and the 20 most recent ratings (except the very latest rating). Then a multiple regression model was fitted, using ordered logit regression, to estimate the influence of the recent rating on the latest rating, controlling for the base rating.
+The main question of this study is whether the recent ratings have an influence on a new rating and whether this influence is not entirely predicted by the 'base rating' for a business. In other words, even if a business is rated in general as, say, "good", do the recent ratings influence a new rating. To control this 'base rating' of a business, the 20 most recent ratings were separated from all the older ratings, i.e. an average was calculated for both the older base rating and the 20 most recent ratings (except the very latest rating). Then a multiple regression model was fitted, using ordered logistic regression, to estimate the influence of the recent rating on the latest rating, controlling for the base rating.
 
 The model coefficients from the fitted model hint at an influence of both the base and the recent average rating on the new (latest) rating. But the recent average rating does have a significant (even bigger) influence on the new rating, even when controlling for the business' base rating. Therefore we can say, yes, recent ratings do influence new ratings, independently of how the business is rated in general.
 
 The number of reviews a business has at the time of the latest rating does not seem to have any relevance on a new rating, and neither does the country.
 
-There are though a couple of drawbacks of this Ordered Logit Regression:
+There are though a couple of drawbacks of this ordered logistic regression:
 
 * This method assumes that the coefficients that describe the relationship between a 1-star rating and any higher rating is the same as between a 1-or-2-star rating and any higher rating (the "proportional odds assumption"). This assumption has not been tested here.
 * It is difficult to come up with diagnostics for the model fitted here. I don't know _how_ fit it is.
