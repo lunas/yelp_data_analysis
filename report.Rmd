@@ -24,7 +24,6 @@ references:
     given: UCLA
   id: ologit
   title: R Data Analysis Examples - Ordinal Logistic Regression
-fontsize: 7pt
 geometry: margin=1in  
 output: pdf_document
 ---
@@ -50,7 +49,7 @@ This study evaluates whether a new star rating is related to the average of olde
 
 # Introduction
 
-Most users of Yelp, when they review a business and judge it with a rating (i.e. a number of "stars" between 1 and 5), have already seen the older reviews of that business, since they are displayed on the same page. Social Psychology suggests that other people's opinions influence ones own judgment; see, among many, for example [@aesch]. Therefore it seems reasonable to assume that older ratings, corresponding to other people's options, could influence a user's new rating.
+Most users of Yelp, when they review a business and judge it with a rating (i.e. a number of "stars" between 1 and 5), have already seen the older reviews of that business, since they are displayed on the same page. Social Psychology suggests that other people's opinions influence ones own judgment [see, among many, for example @aesch]. So it seems reasonable to assume that older ratings, corresponding to other people's options, could influence a user's new rating.
 
 If that was the case, designers of Yelp or similar services that use any kind of rating might want to look into ways of "blind" voting, so that new raters can see other users' ratings only _after_ having stated their own rating.
 
@@ -64,17 +63,16 @@ Those two factors were distinguished with a multivariate model.
 
 ## Dataset
 
-I used the data from the [Yelp Dataset Challenge](http://www.yelp.com/dataset_challenge): it contains 1.5M reviews of 481 thousend businesses, by 366 thousend users. 
+I used the data from the [Yelp Dataset Challenge](http://www.yelp.com/dataset_challenge): it contains 1.5M reviews of 481 thousand businesses, by 366 thousand users. 
 
 To better handle this amount of data, I programmed a small [Rails application](https://github.com/lunas/yelp_seeder) to seed the data (which is available in JSON format) into a PostgreSQL database.
 
 I then created a table that lists each business in a row, and in separate columns contains:
 
 * the latest rating; the rating of the new user that will be compared to previous ratings
-* the recent average rating: the average of the ratings of the most recent 21 reviews (excluding the latest rating)
+* the recent average rating: the average of the ratings of the most recent 20 reviews (excludes the latest rating)
 * the base average rating: the average of all older reviews (i.e. all ratings excluding the latest 21 ratings)
 * the number of reviews at the time of the latest rating
-* the number of times the latest rating got voted as 'useful'
 * the country of the business: either USA, Canada, Great Britain or Germany.
 
 ```{r, echo=FALSE, cache=TRUE}
@@ -129,7 +127,7 @@ agg.ratings$country <- as.character(agg.ratings$country)
 
 ```
 
-To calculate averages of the latest 20 ratings and meaningful averages of the even older base ratings, we need businesses with at least 40 reviews (2 * 20). Therefore businesses with fewer reviews were filtered out.
+To calculate averages of the latest 20 ratings and meaningful averages of the even older base ratings, we need businesses with at least 40 reviews (2 * 20). Therefore businesses with fewer reviews were filtered out. The top of this table looks like this:
 ```{r, echo=FALSE, comment=''}
 # head(agg.ratings[,c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating', 'useful','country', 'recent.sd')])
 for.display <- agg.ratings[1:5, c('business_id', 'num.reviews', 'base.avg.rating', 'recent.avg.rating', 'last.rating','country')]
@@ -140,6 +138,8 @@ print(for.display, row.names=FALSE)
 
 ## Data exploration
 
+The distribution of both ``base.avg.rating`` and ``recent.avg.rating`` is close to a normal. Not so the distribution of the latest ratings:
+
 ```{r, echo=FALSE, message=FALSE, fig.height=2.5}
 
 h2 <- qplot(base.avg.rating,   data = agg.ratings, geom = "histogram") + theme(axis.title=element_text(size=10))
@@ -148,11 +148,7 @@ h4 <- qplot(last.rating, data = agg.ratings, geom = "histogram") + theme(axis.ti
 multiplot(h2, h3, h4, cols = 3)
 ```
 
-The distribution of both base.avg.rating and recent.avg.rating is close to a normal. Not so the distribution of the latest ratings.
-
-How are the ratings distributed in the three countries?
-
-Amount of reviews per country:
+How are the ratings distributed in the three countries? Number of reviews per country and per star:
 ```{r, echo=FALSE}
 table(agg.ratings$country, agg.ratings$last.rating)
 ```
@@ -162,9 +158,9 @@ h1 <- qplot(log(last.rating),  data = agg.ratings, geom = "histogram", facets = 
 # h1 
 ```
 
-The distribution of last.rating seems to be roughly similar in the USA, Canada and Great Britain. There are no german businesses any more: all of them had less than 40 reviews and were therefore filtered out.
+The distribution of the latest rating seems to be roughly similar in the USA, Canada and Great Britain. There are no german businesses any more: all of them had less than 40 reviews and were therefore filtered out.
 
-Plot the base.avg.rating and recent.avg.rating per stars (last-rating):
+Plot the ``base.avg.rating`` and ``recent.avg.rating`` per stars (latest rating):
 
 ```{r, echo=FALSE, fig.height=2.5}
 
@@ -182,7 +178,7 @@ p <-ggplot(agg.ratings, aes(x = last.rating, y = recent.avg.rating)) +
 # no need to print this one
 ```
 
-There seems to be a small correlation between the latest rating and the both the base average rating and the recent average rating.
+There seems to be a small correlation between the latest rating and both the base average rating and the recent average rating.
 
 Let's calculate the Spearman correlation (since the latest rating is not normally distributed):
 
@@ -190,13 +186,13 @@ Let's calculate the Spearman correlation (since the latest rating is not normall
 rcorr(as.matrix(agg.ratings[,c("base.avg.rating", "recent.avg.rating", "last.rating")]), type="spearman")
 ```
 
-To have a preliminary look at the interaction of those average ratings with the latest rating, let's do a quick multiple regression that predicts latest.rating by recent average rating and controls for base average rating:
+To have a preliminary look at the interaction of those average ratings with the latest rating, let's do a multiple regression that predicts the latest rating by recent average rating and controls for base average rating:
 
 ```{r, echo=FALSE}
 summary( lm(agg.ratings$last.rating ~ agg.ratings$base.avg.rating + agg.ratings$recent.avg.rating) )
 ```
 
-Apparently the variable recent.avg.rating does add significantly to the model: it is not redundant even if we include the base average rating.
+Apparently the variable ``recent.avg.rating`` does add significantly to the model: it is not redundant even if we include the base average rating.
 
 ## Methods
 
@@ -238,7 +234,7 @@ p <- pnorm(abs(coefficients[, "t value"]), lower.tail = FALSE) * 2
 
 We see that both the base average rating and the recent average rating exhibit a significant influence on a new rating, whereas the number of reviews seems to be irrelevant.
 
-To easier interpret the coeffient, let's convert them to odds rations and calculate there confidence intervals:
+To easier interpret the coeffient, let's convert them to odds rations and calculate their confidence intervals:
 
 ```{r, echo=FALSE, message=FALSE}
 # Get confidence intervals for the coefficients: 
@@ -250,7 +246,7 @@ ci <- confint(m) # default method gives profiled CIs
 exp(cbind(OddsRatios = coef(m), ci))
 ```
 
-So we can expect an increase in the base average rating of one start to increase the _odds_ for the lastest rating to get a higher star-rating to rise by 82%.
+So we can expect an increase in the base average rating of one star (one 'unit') to increase the _odds_ for the latest rating to get a higher star-rating to rise by 82%.
 
 Likewise, an increase in the recent average rating of one star raises the _odds_ for the latest rating to get a (any) higher rating more than twice (2.14).
 
@@ -258,18 +254,18 @@ Both these odds have a confidence intervall way above one, as opposed to the num
   
 # Discussion
 
-The main question of this study is whether the recent ratings have an influence on a new rating and whether this influence is not entirely predicted by the 'base rating' for a business. In other words, even if a business is rated in general as, say, "good", do the recent ratings influence a new rating. To control this 'base rating' of a business, the 20 most recent ratings were separated from all the older ratings, i.e. an average was calculated for both older base rating and the 20 most recent ratings (except the very latest rating). Then a multiple regression model was fitted, using ordered logit regression, to estimate the influence of the recent rating on to the latest rating, controlling for the base rating.
+The main question of this study is whether the recent ratings have an influence on a new rating and whether this influence is not entirely predicted by the 'base rating' for a business. In other words, even if a business is rated in general as, say, "good", do the recent ratings influence a new rating. To control this 'base rating' of a business, the 20 most recent ratings were separated from all the older ratings, i.e. an average was calculated for both the older base rating and the 20 most recent ratings (except the very latest rating). Then a multiple regression model was fitted, using ordered logit regression, to estimate the influence of the recent rating on the latest rating, controlling for the base rating.
 
-The model coefficients from the fitted model hint at an influence of both the base and the recent average rating on the new (latest) rating. But the recent average rating does have a significant (even bigger) influence on the new rating, even when controlling for the business' base rating. Therefore we can say, yes, recent ratings do influence new ratings, independently of whether how the business is rated in general.
+The model coefficients from the fitted model hint at an influence of both the base and the recent average rating on the new (latest) rating. But the recent average rating does have a significant (even bigger) influence on the new rating, even when controlling for the business' base rating. Therefore we can say, yes, recent ratings do influence new ratings, independently of how the business is rated in general.
 
-The number of reviews a business has at the time of the latest rating does not seem to have any relevance on a new rating.
+The number of reviews a business has at the time of the latest rating does not seem to have any relevance on a new rating, and neither does the country.
 
 There are though a couple of drawbacks of this Ordered Logit Regression:
 
-* this method assumes that the coefficients that describe the relationship between a 1-star rating and any higher rating is the same as between a 1-or-2-star rating and any higher rating (the "proportional odds assumption"). This assumption has not been tested here.
-* it is difficult to come up with diagnostics for the model fitted here. I don't know _how_ fit it is.
+* This method assumes that the coefficients that describe the relationship between a 1-star rating and any higher rating is the same as between a 1-or-2-star rating and any higher rating (the "proportional odds assumption"). This assumption has not been tested here.
+* It is difficult to come up with diagnostics for the model fitted here. I don't know _how_ fit it is.
 
-The strong significance of the coefficients related to the main question of this study indicate though, that the hypothesized relationship of recent ratings and new ratings helds, controlled for the business' base rating.
+The strong significance of the coefficients related to the main question of this study indicate though, that the hypothesized relationship of recent ratings and new ratings holds, controlled for the business' base rating.
 
 Of course one should keep in mind, that this data is purely 'correlational', not causal.
 
