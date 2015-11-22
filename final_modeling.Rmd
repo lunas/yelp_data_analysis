@@ -3,6 +3,8 @@ title: "Exploratory Modeling"
 author: "Lukas Nick"
 date: "30. Oktoober 2015"
 output: html_document
+
+link to report on aws: https://s3.amazonaws.com/coursera-uploads/user-ec130ec7280812d316ab5397/976134/asst-8/3e74080090ff11e58be287022cd501d6.pdf
 ---
 
 ```{r}

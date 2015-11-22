@@ -1,6 +1,6 @@
 ---
 title: "Influence of Recent Ratings on New Ratings in Yelp Business Reviews"
-author: "Lukas Nick"
+author: "Coursera Datascience Project"
 references:
 - author:
   - family: Asch
@@ -244,9 +244,9 @@ ci <- confint(m) # default method gives profiled CIs
 exp(cbind(OddsRatios = coef(m), ci))
 ```
 
-So we can expect an increase in the base average rating of one star (one 'unit') to increase the _odds_ for the latest rating to get a higher star-rating to rise by 82%.
+So we can expect an increase in the base average rating of one star (one 'unit') to increase the _odds_ by 82% that the latest rating gets a higher star-rating.
 
-Likewise, an increase in the recent average rating of one star raises the _odds_ for the latest rating to get a (any) higher rating more than twice (2.14).
+Likewise, an increase in the recent average rating of one star raises the _odds_ more than twice that the latest rating gets a (any) higher rating.
 
 Both these odds have a confidence intervall way above one, as opposed to the number of reviews: with 95% probability, one more review does not change the odds of the latest review to have any higher star rating.
   
