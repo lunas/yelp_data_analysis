@@ -1,0 +1,22 @@
+.reveal .slides {
+    height: 800px;
+}
+.reveal h1, .reveal h2, .reveal h3 {
+    word-wrap: normal;
+    -moz-hyphens: none;
+}
+.reveal section {
+    font-size: 28px;
+}
+
+.reveal .frame {
+    width: 100%;
+}
+.reveal .caption {
+    float: left;
+    width: 30%;
+}
+.reveal .plot{
+    float: left;
+    width: 66%;
+}
