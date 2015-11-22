@@ -161,10 +161,10 @@ The distribution of the latest rating seems to be roughly similar in the USA, Ca
 Plot the ``base.avg.rating`` and ``recent.avg.rating`` per stars (latest rating):
 
 ```{r, echo=FALSE, fig.height=2.5}
-
-p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100)   + theme(axis.title=element_text(size=10))
-p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100) + theme(axis.title=element_text(size=10))
+p1 <- ggplot(agg.ratings, aes(last.rating, base.avg.rating)) + geom_point(alpha=1/100)   + xlab('latest rating') + ylab('base avg rating') + theme(axis.title=element_text(size=10))
+p2 <- ggplot(agg.ratings, aes(last.rating, recent.avg.rating)) + geom_point(alpha=1/100) + xlab('latest rating') + ylab('recent avg rating') + theme(axis.title=element_text(size=10))
 multiplot(p1, p2, cols = 2)
+
 ```
 
 ```{r, echo=FALSE}
